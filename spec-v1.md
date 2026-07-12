@@ -123,7 +123,14 @@ Layers that graduate later, in pull order, each with its own gate:
 
 Agent orchestration or dispatch of any kind · code review features ·
 multi-vendor adapters · CI enforcement · prompt-surface evals · the
-locked-acceptance workflow · team/sync/hosted anything · pricing.
+locked-acceptance workflow · team/sync/hosted anything · pricing ·
+a desktop app (ruled 2026-07-12: the wedge user is terminal-native, the
+signing/update surface is a standing solo-founder tax, and the winning
+class precedent is CLI + local web; the dashboard ships as self-contained
+static assets served by the CLI's local server over SQLite, which keeps a
+Tauri wrap cheap if ever warranted. Named re-entry for a desktop surface:
+users running long unattended sessions ask for ambient OS-level
+notifications — a menu-bar monitor, not a dashboard shell).
 
 ## Build motion
 
