@@ -1,9 +1,10 @@
 # coreartifact — v1 spec
 
-Drafted 2026-07-12 with the aeh grill discipline (decision-dependency ordered,
-every requirement checkable, non-goals non-empty). This document is compiler
-input for the v1 build and the record of what was decided and why. Supersedes
-nothing; the aeh repo remains the private proving ground.
+Drafted 2026-07-12 (grill round 1), deep interview + platform-fact
+verification same day (round 2, twelve further rulings). This is the
+binding record and compiler input for the v1 build. Shared understanding
+confirmed by the operator 2026-07-12; nothing below re-opens without a
+named reason.
 
 ## One sentence
 
@@ -13,163 +14,229 @@ software: what ran, what it cost, what changed, and what proves it correct.
 
 ## Positioning
 
-- Category: the system of record for agent work — vendor-neutral, evidence-
-  first. NOT a cost tracker (ccusage-class tools are commodity; cost is one
-  column here, evidence is the spine). NOT an orchestrator (never compete
-  with the harness — that layer is being absorbed by platform vendors
-  release by release; this product lives in the layer they structurally
-  can't own neutrally).
-- The wedge claim, in the user's language: "every agent session in this repo
-  is recorded with receipts — cost, footprint, gates, checks — and my code
-  never leaves my machine."
-- Naming note: "artifact" carries devops-registry connotation (Artifactory;
-  build artifacts) and Anthropic's Artifacts feature is ambient noise. The
-  tagline does the steering work: evidence, not binaries. coreartifact.com
-  is owned; reserve the npm name immediately (operator action).
+- Category: the system of record for agent work — vendor-neutral,
+  evidence-first. NOT a cost tracker (cost is one derived column; evidence
+  is the spine). NOT an orchestrator (never compete with the harness; that
+  layer is being absorbed by platform vendors — this product lives in the
+  layer they structurally can't own neutrally).
+- The wedge claim, in the user's language: "every agent session in this
+  repo is recorded with receipts — cost, footprint, gates, checks — and my
+  code never leaves my machine."
+- Naming: "artifact" carries devops-registry connotation (Artifactory) and
+  Anthropic's Artifacts feature is ambient noise; the tagline does the
+  steering — evidence, not binaries. coreartifact.com is owned. npm
+  package `coreartifact` — reserve immediately (operator action, before
+  anything else becomes public).
 
 ## Wedge user (v1)
 
-Solo agent power-users: people running Claude Code daily on real projects.
-Founder-market fit is exact; distribution is OSS + content; the paying buyer
-(team lead) arrives later, pulled by these users. Team anything is behind
-the expand gate below.
+Solo agent power-users: people running Claude Code daily on real projects,
+including headless/dispatched fleets. Founder-market fit is exact. Team
+anything waits behind the expand gate.
 
 ## v1 surface
 
-An OSS, single-player-complete tool, three parts:
+OSS, single-player-complete:
 
-1. **Capture** — Claude Code hooks-based recorder installed by
-   `npx coreartifact init`: records sessions with zero workflow change.
-2. **Ledger** — local SQLite, one vendor-neutral versioned event schema.
-3. **View** — `coreartifact open`: a local dashboard over the ledger, plus
-   a terse CLI (`coreartifact log`, `coreartifact show <session>`).
+1. **Capture** — Claude Code hooks recorder installed by
+   `npx coreartifact init`; zero workflow change.
+2. **Ledger** — per-repo SQLite over an append-only spool (architecture
+   below), one vendor-neutral versioned schema.
+3. **View** — `coreartifact open` (read-only local dashboard) +
+   `coreartifact log` / `show <session>` (CLI).
+4. **Checks** — `coreartifact check <name> -- <cmd>`: runs the command,
+   records name + command + output + pass/fail bound to the active session
+   (nullable session for standalone runs); rendered as evidence badges.
+   The seed of the trust layer; deliberately thin.
 
-Plus exactly one trust primitive:
+Bins: `coreartifact` (canonical — all docs and examples) + `cart` (the one
+blessed short alias, mentioned once in the README).
 
-4. **Checks** — `coreartifact check <name> -- <cmd>` (and a hook variant):
-   runs the command, records name + command + captured output + exit
-   status, bound to the active session; rendered as evidence badges. The
-   seed of the trust layer and the future CI hook. Thin by design.
+## Architecture rulings (interview, 2026-07-12)
 
-## Requirements — each criterion machine-checkable
+- **Storage: per-repo + global registry.** `.coreartifact/ledger.db` per
+  repo (gitignored by init); `~/.coreartifact/registry` lists known
+  ledgers; the dashboard unions registered ledgers for the cross-repo
+  "today" view. Repo = trust boundary; uninstall is per-repo and total.
+- **Write path: spool → lazy ingest.** Hooks do exactly one atomic
+  O_APPEND of one JSON line to a per-repo spool (microseconds — fits every
+  hook timeout, contention-free across concurrent worktree sessions);
+  `log`/`open` ingest the spool into SQLite on read; the raw spool remains
+  ground truth if ingestion ever has a bug.
+- **Install locus: per-repo `.claude/settings.local.json`** (explicit
+  opt-in per repo, teammate-invisible, cleanly removable). `init --global`
+  is a v1.1 re-entry on demonstrated many-repo pain.
+- **Attribution: git common dir.** Worktree sessions resolve to the main
+  repo's ledger (worktree path kept as a session column); non-git dirs
+  fall back to the init root; headless sessions are captured and tagged
+  `headless` — the agent fleet is first-class, not an edge.
+- **Granularity: flat stream, nesting keys captured.** v1 renders a flat
+  per-session timeline; `prompt_id`, `subagent_id`, `tool_use_id` are
+  recorded on every event so the v2 tree view is pure UI, no migration.
+- **Cost: fail-soft transcript enrichment.** Cost/tokens are a DERIVED
+  facet parsed from the session transcript JSONL (the only local source —
+  verified absent from hook payloads), version-pinned to tested Claude
+  Code releases and labeled derived in the UI. On parser mismatch the
+  facet records ABSENT (never zero, never estimated silently) and
+  `coreartifact doctor` names the needed parser update. Evidence facets
+  (commands, checks, footprint, shas) ride ONLY the stable hooks surface —
+  the trust spine never depends on the unstable parse.
+- **Test parsing: vitest-only, pluggable.** Every command records with its
+  exit status universally; one deep parser (vitest) ships in v1 behind a
+  parser interface sized for contribution; further runners (pytest first)
+  are gated on demonstrated demand.
+- **Dashboard: strictly read-only.** One GET surface over SQLite; all
+  actions live in the CLI. First UI action arrives only on demonstrated
+  pull, implemented as a CLI invocation, never a parallel write path.
+- **Session lifecycle (default):** SessionEnd appends an end event when it
+  fires; a session with no end event and no recent activity is finalized
+  at ingest as `closed-inferred`, visually distinct from `closed-clean`
+  (crash-path firing is unverified — honesty over tidiness).
+- **Defaults (operator may veto):** dashboard = vite+react static assets
+  served by the CLI's local server; transcripts are never copied — the
+  path is stored, the file stays Claude Code's; registry is a plain JSON
+  file; macOS/Linux are tier-1, Windows best-effort via WSL until demand.
 
-The v1 done-criterion (demo-scriptable end to end, assertable in CI against
-a fixture repo):
+## Verified platform facts (2026-07-12, live docs — re-verify at build)
 
-- `npx coreartifact init` completes in a repo in under 10 minutes with no
-  hand-written config, and prints what it installed (hooks, ledger path).
-- The next Claude Code session in that repo is recorded automatically: the
-  ledger holds a session row with cost/token totals, the file footprint
-  (paths touched), git shas before/after, every command the session ran
-  with exit codes, and parsed test-runner outcomes when a test command ran.
-- `coreartifact open` renders that session with all of the above visible;
-  `coreartifact log` prints a one-line-per-session summary.
-- `coreartifact check lint -- <cmd>` records a bound check with captured
-  output and pass/fail, and the dashboard shows it as a badge on the
-  session.
-- Graceful degradation is explicit: any capture facet that is unavailable
-  (e.g. a hook that didn't fire) records as absent, never as fabricated or
-  silently zero — an empty facet must be distinguishable from a clean one
-  (the aeh empty-vitest-report lesson, applied from birth).
+- `session_id`, `transcript_path`, `cwd` are present in EVERY hook
+  payload; 31 hook events exist including SessionStart/SessionEnd,
+  SubagentStart/Stop, PostToolUse/PostToolUseFailure.
+- PostToolUse(Bash) carries the command string, stdout/stderr, and
+  `duration_ms`; failures carry an `error` naming the exit status —
+  sufficient for "every command with outcomes."
+- **Cost/tokens are NOT in any hook payload.** They exist only in the
+  `claude -p` JSON envelope (invisible to hooks) and the transcript JSONL,
+  whose schema is documented as internal and breakable on any release —
+  hence the fail-soft ruling above.
+- SessionEnd default timeout is 1.5s (spool append fits); firing on
+  crash/SIGKILL is UNVERIFIED — hence lazy finalization.
+- Hooks can be user-global, but a project cannot selectively opt out of
+  user-level hooks (`disableAllHooks` is all-or-nothing) — a further
+  argument for the per-repo install ruling.
+
+## Requirements — the v1 done-criterion (machine-checkable)
+
+Demo-scriptable end to end, assertable in CI against a fixture repo:
+
+- `npx coreartifact init` completes in under 10 minutes with no
+  hand-written config and prints what it installed (hooks, spool, ledger,
+  registry entry).
+- The next Claude Code session in that repo (or any of its worktrees) is
+  recorded automatically: session row with file footprint, git shas
+  before/after, every command with outcome and duration, parsed vitest
+  results when vitest ran, and cost/tokens as a derived facet when the
+  pinned parser matches (absent otherwise, distinguishably).
+- `coreartifact open` renders it; `coreartifact log` prints
+  one-line-per-session summaries across registered repos.
+- `coreartifact check lint -- <cmd>` records a bound evidence badge.
+- Degradation is explicit everywhere: an unavailable facet records as
+  absent, never as fabricated or silently zero — an empty facet is always
+  distinguishable from a clean one.
 - Uninstall is one command and leaves the repo byte-identical except the
-  ledger file.
-
-## Schema commitments
-
-- One versioned, vendor-neutral event schema from the first migration —
-  adapter-specific fields namespaced, nothing Claude-Code-shaped in core
-  tables (the aeh dispatch-contract lesson). Claude Code is the only v1
-  adapter; a second adapter (Codex CLI) is the v1.1 neutrality proof, not
-  a v1 promise.
-- The session is the primary unit; turns/dispatches nest under it. Exact
-  granularity is a build-time decision recorded in the schema doc when the
-  hooks surface is verified (open risk below).
-- SQLite, local, one file per machine or per repo (decide at build against
-  real usage; lean per-repo — the repo is the trust boundary).
+  ledger/spool it removes.
 
 ## Data stance (load-bearing)
 
-Local-first. In the OSS core, nothing leaves the machine — no code, no
+Local-first. OSS core: nothing leaves the machine — no code, no
 transcripts, no telemetry by default. One opt-in anonymous weekly ping
-(version + install id only) exists solely to measure the expand gate, off
-by default, asked once at init. The future hosted layer syncs evidence
-metadata only — outcomes, costs, check results, file paths, sha references
-— never file contents, never transcripts. "Your code never leaves your
-machine" is a standing product claim; treat it as a law, not a preference.
+(version + install id), off by default, asked once at init, exists solely
+to measure the expand gate. The future hosted layer syncs evidence
+metadata only — outcomes, costs, check results, paths, sha references —
+never file contents or transcripts. "Your code never leaves your machine"
+is a law, not a preference.
 
 ## OSS / paid line
 
-Single-player is OSS-complete and never crippled: capture, ledger, CLI,
-dashboard, checks — permissive license (default Apache-2.0 for the patent
-grant; revisit only with counsel). Paid (post-gate) = multiplayer: hosted
-sync, team dashboards, retention, org trust policy, CI-enforced checks.
-The line is single-player vs multi-player — defensible and fair.
+Single-player is OSS-complete and never crippled (capture, ledger, CLI,
+dashboard, checks). License: **Apache-2.0** (confirmed — the patent grant;
+you pick the conservative license once). Paid, post-gate = multiplayer:
+hosted sync, team dashboards, retention, org trust policy, CI-enforced
+checks. The line is single-player vs multi-player.
 
 ## Expand gate + roadmap
 
-No hosted or team feature is built until BOTH: ≥50 weekly-active installs
-(the opt-in ping) AND ≥3 unprompted asks for sync/team. Re-entry-condition
-discipline applied to the roadmap.
+No hosted or team feature until BOTH: ≥50 weekly-active installs (opt-in
+ping) AND ≥3 unprompted asks for sync/team.
 
-Layers that graduate later, in pull order, each with its own gate:
-- **v1.1** second adapter (Codex CLI) — proves schema neutrality.
-- **v2** prompt-surface evals (paired replay over the fixture corpus the
-  ledger accretes) and the locked-acceptance workflow — the deep aeh
-  mechanisms, productized only once the ledger has created their raw
-  material in user repos.
-- **Post-gate** the hosted trust layer: sync, team views, org policy.
+Graduating layers, each with its own gate: **v1.1** second adapter (Codex
+CLI — the schema-neutrality proof) and `init --global` (on many-repo
+pain) · **v2** prompt-surface evals + locked-acceptance workflow (need the
+corpus v1 accretes) and the session tree view (pure UI over captured
+keys) · **post-gate** the hosted trust layer.
+
+## Launch posture
+
+**Private while building; public at v1 launch** (operator ruling,
+overriding the build-in-public lean). To keep "built with receipts"
+verifiable rather than curated: the ENTIRE history publishes unredacted at
+launch — git log, aeh ledger, release packets, escalations included — and
+the launch write-up walks that history. Reserve the npm name before any
+public artifact exists.
 
 ## Non-goals (v1, confirmed)
 
 Agent orchestration or dispatch of any kind · code review features ·
 multi-vendor adapters · CI enforcement · prompt-surface evals · the
 locked-acceptance workflow · team/sync/hosted anything · pricing ·
-a desktop app (ruled 2026-07-12: the wedge user is terminal-native, the
-signing/update surface is a standing solo-founder tax, and the winning
-class precedent is CLI + local web; the dashboard ships as self-contained
-static assets served by the CLI's local server over SQLite, which keeps a
-Tauri wrap cheap if ever warranted. Named re-entry for a desktop surface:
-users running long unattended sessions ask for ambient OS-level
-notifications — a menu-bar monitor, not a dashboard shell).
+a desktop app (ruled 2026-07-12: wedge user is terminal-native; the
+signing/update surface is a solo-founder tax; CLI + local web is the
+winning class precedent; the static-assets architecture keeps a Tauri
+wrap cheap. Desktop re-entry: users running long unattended sessions ask
+for ambient OS-level notifications — a menu-bar monitor, not a dashboard
+shell).
 
 ## Build motion
 
-Built WITH aeh, publicly: fresh repo, brownfield `aeh init` (TypeScript
-CLI stack — vitest + tsc profile; the web golden template does not apply),
-campaigns from the first PRD, ledger and release packets committed to the
-repo. The meta-story is the launch content: built by agents, with receipts.
-This also legitimately fires aeh's own productization re-entry (three PRDs
-across two projects).
+Built with aeh: fresh private repo, brownfield `aeh init` (TypeScript CLI
+stack — vitest + tsc profile; the web golden template does not apply),
+ledger and release packets committed from the first campaign.
+
+**Pre-PRD platform act:** the hooks smoke test — a real hook installed by
+hand, a real session, the spool inspected; findings dated and recorded,
+reshaping criteria if the fact sheet above missed anything.
+
+**Three campaigns, skeleton-first:**
+1. **PRD-0001 — walking skeleton:** init, hook capture, spool, lazy
+   ingest, `log`/`show`, attribution rules. The 10-minute demo minus
+   polish, end-to-end thin — every platform surprise surfaces here, in
+   the cheapest campaign.
+2. **PRD-0002 — evidence depth:** vitest parser (pluggable interface),
+   fail-soft cost enrichment, the checks primitive, `doctor`, uninstall,
+   the telemetry ping + consent.
+3. **PRD-0003 — dashboard:** the read-only viewer, designed against a
+   by-then-real ledger.
 
 ## Open risks
 
-- **The hooks capture surface is unverified.** Whether Claude Code hooks
-  expose cost/token totals, session boundaries, and command outcomes at
-  the fidelity v1 assumes must be verified against live docs and a smoke
-  test BEFORE the first PRD freezes (the aeh platform-facts law: never
-  assert harness behavior from memory; date and record what's found).
-  Capture fidelity findings reshape the criterion list, not the wedge.
-- **Platform absorption.** Anthropic could ship a native session ledger.
-  Mitigations are structural: vendor neutrality, local-first privacy
-  stance, and the org-specific corpus — value that accretes to the user,
-  not the vendor. If the plumbing is absorbed, the product retreats up a
-  layer (checks, evals, policy) by design.
-- **Commodity adjacency.** Week-one users may read it as a cost dashboard.
-  The checks primitive and evidence-first dashboard design carry the
-  positioning; if usage data shows cost is the only facet used, that's a
-  wedge-miss signal to confront, not spin.
-- **Solo bandwidth.** Two products (gm-portal service work + coreartifact)
-  compete for gate attention. The aeh spec's own lean — max two concurrent
-  campaigns — applies across projects too.
+- **Transcript-parse maintenance tax:** the cost facet breaks on Claude
+  Code releases by design of its source; the fail-soft + doctor shape
+  contains it, but it is a standing chore. Accepted knowingly.
+- **Crash-path capture:** SessionEnd on abnormal exit is unverified;
+  `closed-inferred` handles it honestly, but the smoke test should try to
+  produce a crash and observe.
+- **Platform absorption:** Anthropic could ship a native session ledger.
+  Mitigations are structural: vendor neutrality, local-first stance, and
+  the user-owned corpus. If plumbing is absorbed, retreat up a layer
+  (checks, evals, policy) by design.
+- **Commodity adjacency:** if usage shows cost is the only facet read,
+  that's a wedge-miss signal to confront, not spin.
+- **Solo bandwidth:** gm-portal service work and coreartifact compete for
+  gate attention; max two concurrent campaigns holds across projects.
 
-## Decisions log (grill record, 2026-07-12)
+## Decisions log
 
-Wedge user: solo agent power-users · wedge pain: drop-in evidence ledger ·
-aeh relation: extract the spine, aeh stays the private proving ground ·
-vendor scope: Claude Code capture, neutral schema, Codex as v1.1 proof ·
-OSS line: single-player OSS-complete · capture: evidence-rich (cost +
-footprint + shas + command outcomes + test parses) · data stance:
-local-first, metadata-only sync · trust seed: ship thin checks primitive ·
-done-criterion: the 10-minute zero-config demo above · expand gate: 50 WAU
-+ 3 unprompted team asks · non-goals: confirmed as listed · build motion:
-aeh-built, publicly.
+Round 1 (2026-07-12): wedge user = solo power-users · wedge pain =
+drop-in evidence ledger · extract the spine, aeh stays private proving
+ground · Claude Code capture, neutral schema, Codex v1.1 · single-player
+OSS-complete · evidence-rich capture · local-first, metadata-only sync ·
+ship thin checks · 10-minute done-criterion · expand gate 50 WAU + 3
+unprompted asks · non-goals wall · aeh-built · no desktop app.
+
+Round 2 (2026-07-12, deep interview): per-repo ledger + registry · spool
+→ lazy ingest · per-repo settings.local.json install · git-common-dir
+attribution + headless first-class · vitest-only pluggable parsing ·
+fail-soft derived cost (hooks verified cost-free) · read-only dashboard ·
+flat stream w/ nesting keys · `coreartifact` + `cart` bins · public at
+launch w/ unredacted history (operator override) · Apache-2.0 · three
+campaigns skeleton-first.
