@@ -97,7 +97,7 @@ blessed short alias, mentioned once in the README).
   path is stored, the file stays Claude Code's; registry is a plain JSON
   file; macOS/Linux are tier-1, Windows best-effort via WSL until demand.
 
-## Verified platform facts (2026-07-12, live docs — re-verify at build)
+## Verified platform facts (2026-07-12, live docs — superseded in part by the 2026-07-13 smoke test below)
 
 - `session_id`, `transcript_path`, `cwd` are present in EVERY hook
   payload; 31 hook events exist including SessionStart/SessionEnd,
@@ -114,6 +114,68 @@ blessed short alias, mentioned once in the README).
 - Hooks can be user-global, but a project cannot selectively opt out of
   user-level hooks (`disableAllHooks` is all-or-nothing) — a further
   argument for the per-repo install ruling.
+
+## Hooks smoke test findings (2026-07-13, OBSERVED — Claude Code 2.1.208, macOS; docs cross-checked at code.claude.com/docs/en/hooks)
+
+The pre-PRD platform act, executed: real hook installed via per-repo
+`.claude/settings.local.json` (an atomic `jq -c` O_APPEND to a spool),
+five real headless sessions plus kill and worktree variants. 25 events
+captured, zero spool errors, zero lost lines. Observed truth supersedes
+the 2026-07-12 fact sheet where they conflict.
+
+- **Headless capture works, full lifecycle.** `claude -p` with
+  per-repo `settings.local.json` fires SessionStart → UserPromptSubmit →
+  PreToolUse → PostToolUse → Stop → SessionEnd. The fleet lane is safe
+  to build on.
+- **Crash paths, observed:** SIGKILL → spool simply stops (no Stop, no
+  SessionEnd). SIGTERM → SessionEnd fires, no Stop. `closed-inferred`
+  lazy finalization confirmed necessary. Caveat: SessionEnd `reason` was
+  `"other"` for BOTH clean headless completion and SIGTERM — reason does
+  not discriminate; closed-clean vs closed-inferred = presence/absence
+  of the SessionEnd event, nothing finer.
+- **Payload shapes, observed (richer than documented):**
+  `session_id`/`transcript_path`/`cwd`/`hook_event_name` on every event;
+  `prompt_id` on everything after prompt submit (including SessionEnd);
+  `permission_mode` + `effort` on tool events. PostToolUse(Bash) carries
+  `tool_input.command`, `tool_response.{stdout,stderr,interrupted}`,
+  `tool_use_id`, `duration_ms`. PostToolUseFailure carries `error` (a
+  string embedding `Exit code N` + message), `is_interrupt`,
+  `duration_ms` — and NO `tool_response`.
+- **Nesting keys, real names:** `prompt_id`, `tool_use_id`, and
+  `agent_id` + `agent_type` (there is no `subagent_id` — schema should
+  use `agent_id`). SubagentStart/SubagentStop fire; every tool event
+  inside a subagent carries `agent_id`/`agent_type`; SubagentStop also
+  carries `agent_transcript_path` and `last_assistant_message`. The
+  flat-stream ruling holds as designed. The spawning tool is named
+  `Agent` in 2.1.208.
+- **Cost absence re-confirmed:** no cost/token field in any observed
+  payload; `claude -p --output-format json` envelope carries
+  `total_cost_usd` + full `usage` (invoker-visible only). Fail-soft
+  derived-cost ruling stands.
+- **WORKTREE CAPTURE GAP (spec-reshaping — settle at PRD-0001 grill):**
+  a session running in a git worktree does NOT load the main checkout's
+  `.claude/settings.local.json` — the gitignored file is absent from the
+  worktree checkout and Claude Code has no git-common-dir fallback
+  (control run in the main checkout fired; identical worktree run fired
+  nothing). The git-common-dir attribution ruling stands, but capture
+  must exist before attribution matters: PRD-0001 must name the
+  worktree-capture mechanism (candidates: init writes a propagation
+  step; WorktreeCreate/WorktreeRemove hook events exist in 2.1.208;
+  dispatcher-side settings copy for fleets; earlier `init --global`
+  re-entry). Until then, worktree sessions are silently uncaptured.
+- **Auto-backgrounded commands:** a long-running Bash (`sleep 120`) was
+  auto-backgrounded — PostToolUse fired in 155 ms with
+  `tool_response.backgroundTaskId` and empty stdout; whether any later
+  event carries the eventual outcome is UNVERIFIED. "Every command with
+  outcome" must treat backgrounded commands as outcome-absent (honest
+  degradation) until observed otherwise.
+- **Stale 2026-07-12 facts:** docs now enumerate 30 hook events, not 31
+  (SubagentStart/Stop, PostToolUseFailure, WorktreeCreate/Remove all
+  real); the SessionEnd 1.5s-timeout claim is gone — command hooks
+  default 600s.
+- **Not yet covered (operator-lane):** one interactive session
+  eyeballed end-to-end (all smoke runs were headless — the inverse of
+  the usual gap); hook behavior across `claude` version upgrades.
 
 ## Requirements — the v1 done-criterion (machine-checkable)
 
@@ -194,7 +256,9 @@ ledger and release packets committed from the first campaign.
 
 **Pre-PRD platform act:** the hooks smoke test — a real hook installed by
 hand, a real session, the spool inspected; findings dated and recorded,
-reshaping criteria if the fact sheet above missed anything.
+reshaping criteria if the fact sheet above missed anything. DONE
+2026-07-13 — see the smoke test findings section; one interactive-session
+eyeball remains operator-lane.
 
 **Three campaigns, skeleton-first:**
 1. **PRD-0001 — walking skeleton:** init, hook capture, spool, lazy
@@ -212,9 +276,13 @@ reshaping criteria if the fact sheet above missed anything.
 - **Transcript-parse maintenance tax:** the cost facet breaks on Claude
   Code releases by design of its source; the fail-soft + doctor shape
   contains it, but it is a standing chore. Accepted knowingly.
-- **Crash-path capture:** SessionEnd on abnormal exit is unverified;
-  `closed-inferred` handles it honestly, but the smoke test should try to
-  produce a crash and observe.
+- **Crash-path capture:** RESOLVED by observation 2026-07-13 (see smoke
+  test findings): SIGKILL fires nothing, SIGTERM fires SessionEnd, and
+  `reason` discriminates neither — `closed-inferred` stands as designed.
+- **Worktree capture gap:** worktree sessions load no hooks from the
+  main checkout (smoke test, 2026-07-13) — uncaptured until PRD-0001
+  names the mechanism. The single open spec-level risk from the smoke
+  test.
 - **Platform absorption:** Anthropic could ship a native session ledger.
   Mitigations are structural: vendor neutrality, local-first stance, and
   the user-owned corpus. If plumbing is absorbed, retreat up a layer
