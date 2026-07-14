@@ -1,0 +1,17 @@
+[profile]
+typecheck = "pnpm run typecheck"
+test = "pnpm run test"
+build = "pnpm run build"
+
+[models]
+planner = "claude-opus-4-8"
+builder = "claude-sonnet-5"
+
+[budgets]
+issue_s = 4
+issue_m = 10
+issue_l = 25
+prd = 250
+
+[timeouts]
+implementer = 45

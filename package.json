@@ -1,0 +1,22 @@
+{
+  "name": "coreartifact",
+  "version": "0.0.0",
+  "description": "The local-first evidence ledger for agent-built software: what ran, what it cost, what changed, and what proves it correct.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

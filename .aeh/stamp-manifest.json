@@ -1,0 +1,106 @@
+{
+  "artifacts": [
+    {
+      "path": ".claude/agents/browser-qa.md",
+      "hash": "353e7360b2eeb9bf277179300ea0ee8c4a09e1c75e4843a180ead860717e26ec",
+      "neutralizedHash": "263146370f742184d70473b05198ff058bf3f84a00edecfdd5f7f85fc515d2ff",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/code-reviewer.md",
+      "hash": "13a82ca7e531aa45f412bacabe1071ff8359a5b75be0b72810d3092585ecdd8f",
+      "neutralizedHash": "3f87e22de6144e8745e774a68a247176f5129a01290cf5b6c9de8db42c6552f0",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/data-architect.md",
+      "hash": "71eff23015ae7d269b3296be9e67126e1ac5430bf1bca61e29fbe44a6e138cb8",
+      "neutralizedHash": "aa52a1eeddb9ad188898d05c200de7648f02ae3800d950bc04d5ad40ab9943f1",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/decomposer.md",
+      "hash": "77b7dec02b178debcf1744ba3c3409ece9f9a4fa35fee390b2d2dbd1b1aa0128",
+      "neutralizedHash": "1e177c91c3e3a9604eef3bbca2223439bf56db1c9f8f8fcda2b0b207d6859e1b",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/implementer.md",
+      "hash": "09dab41ee3c43a00985a2e3c4567df142897240734f2922941bd0622826835dd",
+      "neutralizedHash": "262c168a12fecae98ff4a3e0ac808a49c7a52e2436f748e36fe228dc13d39f3a",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/integration-reviewer.md",
+      "hash": "d5a70f3040baeec7bbeddaad3684e607a9b0894778430d9ae9d206c441cce433",
+      "neutralizedHash": "e5ab2029212acb30fc4222caf9f20ccffc3fa29ffc96977ee37596f961a593ec",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/memory-curator.md",
+      "hash": "26100909b12c36d75a80eeb241faf01c3ba18f8ff287a9a136b474a460a3bafb",
+      "neutralizedHash": "8248c79e30863fb38afa2ca71da17041c764496dffbb08ba80889dfe18204c81",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/test-author.md",
+      "hash": "24c498c194513501feaf356a67f1d59a737c7f235d72b9587d59d27ae14fd4fa",
+      "neutralizedHash": "78e36c89bc3074d196443537c679c02c5306cfa0f5d5843ea6b1732e6513daf1",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/agents/ui-prototyper.md",
+      "hash": "bcf42a98c9a61bf1ead5bd2ef28181e6a217eb04e580517526ef09a7dc87df4c",
+      "neutralizedHash": "0d8b16fb768d1078836b58514898ae2ebdc0a0fced85e42a8d522c95a25c4c5b",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-ingest/SKILL.md",
+      "hash": "5d6a3a1e89b7274797ae8d43ec77458685ab6cf08826b6a21aaea6e3d905b515",
+      "neutralizedHash": "5d6a3a1e89b7274797ae8d43ec77458685ab6cf08826b6a21aaea6e3d905b515",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-map/SKILL.md",
+      "hash": "ca2430ca552816d553fe1315a96d5d571a4ed3aadfd5aa8b3d2135170d6ba803",
+      "neutralizedHash": "ca2430ca552816d553fe1315a96d5d571a4ed3aadfd5aa8b3d2135170d6ba803",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-plan/SKILL.md",
+      "hash": "b324a45af9400a7ff1eab6664f0f8fc01edfb1eb9ea0a029d06071bed87ffd61",
+      "neutralizedHash": "b324a45af9400a7ff1eab6664f0f8fc01edfb1eb9ea0a029d06071bed87ffd61",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-prd/SKILL.md",
+      "hash": "d2111c3557afa1dc8c1880602a8c303c59b1354e57a06151d752ff7fb283ebfc",
+      "neutralizedHash": "d2111c3557afa1dc8c1880602a8c303c59b1354e57a06151d752ff7fb283ebfc",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-qa/SKILL.md",
+      "hash": "5dd4ad66a3deaf286952a9101f43a648a018982bd2398238869c1d8d2ed08105",
+      "neutralizedHash": "5dd4ad66a3deaf286952a9101f43a648a018982bd2398238869c1d8d2ed08105",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-retro/SKILL.md",
+      "hash": "606636ec9304cd898bc6300ae418f2701a35385654c1158115f82e39285127da",
+      "neutralizedHash": "606636ec9304cd898bc6300ae418f2701a35385654c1158115f82e39285127da",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-skill/SKILL.md",
+      "hash": "0a40237d28db3d95350bc90186c30cfe342cd797c67a38dfc7d152827a05623a",
+      "neutralizedHash": "0a40237d28db3d95350bc90186c30cfe342cd797c67a38dfc7d152827a05623a",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    },
+    {
+      "path": ".claude/skills/aeh-test-patterns/SKILL.md",
+      "hash": "3a8cda0c8e0bfd47fceccf0eb40402aa6f36c9dc557e655b220a5933abd3f503",
+      "neutralizedHash": "3a8cda0c8e0bfd47fceccf0eb40402aa6f36c9dc557e655b220a5933abd3f503",
+      "harness_ref": "87d6a474115569c59cd6e352d702baeb707c77f397965dceb509187137863caa"
+    }
+  ]
+}

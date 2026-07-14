@@ -1,0 +1,9 @@
+node_modules
+dist/
+.aeh/aeh.db*
+.aeh/events.jsonl
+.aeh/tmp/
+.aeh/transcripts/
+.aeh-attempt.json
+*.tsbuildinfo
+.pnpm-store/
