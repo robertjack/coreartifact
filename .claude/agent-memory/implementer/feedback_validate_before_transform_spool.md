@@ -1,32 +1,51 @@
 ---
 name: feedback-validate-before-transform-spool
-description: In envelope/spool validation, run rejection checks (e.g. control-char scan) on the raw untransformed input before any normalizing transform (e.g. trim) — never after.
+description: Control-char-vs-trim ordering in envelope/spool validation is CONTEXT-DEPENDENT — src/core/envelope.ts's serializeEnvelope(eventText) checks raw-then-trims (no legitimate framing expected); the hook's raw-stdin reader must trim-then-check (a trailing \n is legitimate framing). Applying the wrong one is a real, repeated data-loss bug.
 metadata:
   type: feedback
 ---
 
-On ISS-0001 (2026-07-14 rescue dispatch, fixing finding V3), fixing
-"`eventText` with whitespace padding must round-trip byte-identically" by
-adding `.trim()` *before* the existing control-character rejection check
-silently defeated an already-hardened invariant: `.trim()` strips `\n`
-along with spaces, so a trailing-newline payload (the exact F1 multi-line
-spool-corruption trap this codebase names by ID and has failed on three
-times) passed the control-char check on the *trimmed* text and was wrongly
-accepted, reintroducing the bug the trim was nowhere near touching.
+**Revised 2026-07-14 (ISS-0004 rescue dispatch)** — the original version of
+this memory was itself the cause of a second data-loss bug (S1) on the next
+issue that touched this pattern. Read the "two contexts" section below
+before touching any control-char-rejection-plus-trim code in this repo.
 
-**Why:** `String.prototype.trim()` removes all Unicode whitespace,
-including control characters like `\n`, `\t`, `\r`. Any validation gate
-meant to reject those control characters must run before a transform that
-could remove the exact bytes it's checking for, or the gate becomes a
-no-op for that failure mode.
+## Two contexts, two correct orderings
 
-**How to apply:** When adding a normalizing transform (trim, dedent,
-collapse-whitespace, etc.) to satisfy a new round-trip/byte-identity
-requirement in code that already has a rejection check for a subset of
-what that transform would strip, order operations as: reject-checks on
-raw input first, transform second, re-validate (e.g. JSON.parse) on the
-transformed value last. Don't assume "add the transform, tests will catch
-regressions" — this codebase's own contract prose (see
-`docs/issues/ISS-0001.md`, "The trap, named") calls out that exact
-regression class as the one that has defeated multiple attempts; treat it
-as a standing checklist item whenever touching `serializeEnvelope`.
+**Context A — `serializeEnvelope`'s `eventText` param
+(`src/core/envelope.ts`), and any caller feeding it an already-JSON-extracted
+string.** No legitimate trailing/interior whitespace is expected here — the
+value came out of a parsed structure, not off a wire. Order:
+**reject-raw-control-chars-first, trim second, re-validate JSON last.**
+Trimming before checking would silently accept a value whose corruption
+*is* a trailing/embedded control byte (the F1 multi-line spool-corruption
+trap). This is ISS-0001's V3 finding and is still correct for this
+function.
+
+**Context B — reading raw stdin bytes off a pipe (the hook artifact,
+`src/hook/capture.ts`'s `validateEventText`, and anything else consuming
+`process.stdin` directly).** A trailing `\n` here is not corruption, it is
+the *ordinary, universal shape* of a piped JSON line — every real Claude
+Code hook invocation delivers one. Order: **trim first (strips legitimate
+framing: leading/trailing whitespace, the trailing `\n`), THEN reject
+control chars in the trimmed remainder (catches genuine corruption: an
+*interior* control character that would still desync the spool's line
+count), THEN JSON.parse.** Checking raw-before-trim in this context (i.e.
+applying Context A's rule here) rejects every normal payload as
+"unparseable" and silently drops it — this is exactly what happened on
+ISS-0004's first attempt (S1, 2026-07-14): it copied context A's ordering
+verbatim into a context-B call site.
+
+**Why the two differ:** whether the input is expected to carry legitimate
+wire/stdio framing bytes that a downstream re-embed must strip (context B),
+versus a value with no such framing where any control byte at all is
+inherently suspicious (context A).
+
+**How to apply:** before ordering a control-char check against a trim in
+*this specific* class of code, ask "does this string come straight off
+stdin/a pipe (context B, trim first) or out of an already-parsed JSON
+structure with no expected framing (context A, check first)?" Don't
+pattern-match on "there was a control-char-vs-trim bug here before" without
+checking which context you're actually in — the correct fix is opposite
+depending on the answer, and this codebase now has one bug instance of
+each direction.
