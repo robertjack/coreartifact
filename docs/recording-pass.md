@@ -1,5 +1,23 @@
 # Recording pass — findings (operator lane)
 
+## Manifest and loader (implementer lane, ISS-0002)
+
+The committed streams are indexed by `tests/fixtures/manifest.json` (scenario
+name → file, recorded Claude Code version, ordered hook event names). Load a
+stream by scenario name via `tests/fixtures/loader.ts`
+(`loadFixtureStream('headless')` etc.) — later tests should use the loader,
+never a raw path. `interactive` is present in the manifest with
+`status: "pending"` and no version/file claimed: the operator has not yet run
+the interactive keyboard session (see "Stream status" below). Once
+`tests/fixtures/interactive.jsonl` is recorded and committed, fill in that
+entry's `file`, `claudeCodeVersion` and `hookEvents` — no other code changes
+are needed for the manifest/loader/unit-test contract.
+
+The hand-authored corrupt-line fixture lives at `tests/fixtures/corrupt.jsonl`
+(valid SessionStart line, one deliberately invalid JSON line, valid Stop
+line) — the only fixture permitted to be hand-authored rather than recorded.
+
+
 Recorded 2026-07-14 on **Claude Code 2.1.209**, macOS (the smoke test of
 2026-07-13 ran on 2.1.208; observations below supersede it where they
 conflict). Recorder: per-repo `settings.local.json` subscribing all hook

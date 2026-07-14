@@ -1,0 +1,3 @@
+{"session_id":"corrupt-fixture-0001","transcript_path":"/tmp/corrupt-fixture/transcript.jsonl","cwd":"/tmp/corrupt-fixture","hook_event_name":"SessionStart","source":"startup"}
+{this line is not valid JSON — hand-authored to exercise ingest skip-and-continue}
+{"session_id":"corrupt-fixture-0001","transcript_path":"/tmp/corrupt-fixture/transcript.jsonl","cwd":"/tmp/corrupt-fixture","hook_event_name":"Stop"}

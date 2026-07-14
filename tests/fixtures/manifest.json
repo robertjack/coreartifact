@@ -1,0 +1,60 @@
+{
+  "streams": {
+    "interactive": {
+      "file": "interactive.jsonl",
+      "status": "pending",
+      "claudeCodeVersion": null,
+      "hookEvents": [],
+      "note": "Blocked on the operator — needs a real interactive keyboard session (docs/recording-pass.md). Do not fabricate this stream; fill in file/claudeCodeVersion/hookEvents only once the operator commits tests/fixtures/interactive.jsonl."
+    },
+    "headless": {
+      "file": "headless.jsonl",
+      "status": "recorded",
+      "claudeCodeVersion": "2.1.209",
+      "hookEvents": [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUseFailure", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PreToolUse", "SubagentStart",
+        "PostToolUse", "PreToolUse", "PostToolUse", "PreToolUse",
+        "PostToolUse", "SubagentStop", "Stop", "UserPromptSubmit",
+        "Stop", "SessionEnd"
+      ]
+    },
+    "worktree": {
+      "file": "worktree.jsonl",
+      "status": "recorded",
+      "claudeCodeVersion": "2.1.209",
+      "hookEvents": [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "WorktreeCreate",
+        "PostToolUseFailure", "Stop", "SessionEnd",
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "WorktreeCreate",
+        "SubagentStart", "PostToolUse", "PreToolUse", "PostToolUse",
+        "SubagentStop", "Stop", "SessionEnd",
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "Stop", "SessionEnd"
+      ]
+    },
+    "SIGTERM": {
+      "file": "sigterm.jsonl",
+      "status": "recorded",
+      "claudeCodeVersion": "2.1.209",
+      "hookEvents": [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse", "PreToolUse", "PostToolUse",
+        "PreToolUse", "SessionEnd", "PostToolUse"
+      ]
+    },
+    "SIGKILL": {
+      "file": "sigkill.jsonl",
+      "status": "recorded",
+      "claudeCodeVersion": "2.1.209",
+      "hookEvents": [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+        "PreToolUse", "PostToolUse"
+      ]
+    }
+  }
+}
