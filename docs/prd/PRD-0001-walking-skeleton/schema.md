@@ -20,11 +20,12 @@ no server. The persistence surface is exactly three artifacts:
 2. **The ledger** — a per-repo SQLite database. A *disposable,
    rebuildable projection* of the spool. Deleting it and re-ingesting the
    spool must rebuild equivalent rows (R6).
-3. **The registry** — one global plain-JSON file listing ledger roots.
+3. **The registry** — one global append-only JSONL log of ledger roots,
+   folded into a set on read (rewritten 2026-07-14 — see Surface 3).
 
 The repo boundary IS the trust boundary: one spool + one ledger per repo,
 at `<repo_root>/.coreartifact/` (spec architecture ruling); the registry
-is the single global file `~/.coreartifact/registry` (spec ruling). Exact
+is the single global log `~/.coreartifact/registry.jsonl` (spec ruling). Exact
 spool filename and the SQLite driver choice belong to the implementer, not
 this file — the DDL below is vanilla `CREATE TABLE`.
 
@@ -441,29 +442,50 @@ subscribing it breaks agent worktree spawns, see docs/recording-pass.md).
 
 ---
 
-## Surface 3 — the registry (global JSON)
+## Surface 3 — the registry (global append-only JSONL)
 
-One global plain-JSON file at `~/.coreartifact/registry` (spec ruling)
-listing known ledger roots with added-at timestamps. What `log` unions
-across repos (R10).
+**Rewritten 2026-07-14 (escalation amendment).** The registry was a JSON
+object holding an array, which forced `addLedger` into a
+read-modify-write. It was the **only** read-modify-write in the system and
+it was the only component with concurrency bugs — three review rounds died
+on it in sequence (lost update → an O_EXCL lock that permanently wedged
+every `init` after one crash → a stale-lock steal that was TOCTOU and lost
+updates again). Hand-rolling a correct file lock was the wrong problem to
+be solving.
 
-```json
-{
-  "v": 1,
-  "ledgers": [
-    { "repo_root": "/abs/path/to/repo", "added_at": "<iso8601>" }
-  ]
-}
+The registry is now an **append-only JSONL log at
+`~/.coreartifact/registry.jsonl`** — the exact pattern the spool already
+uses and the product is built on. The entire bug class disappears by
+construction: there is no lock, no reaping, no TOCTOU, and nothing to
+wedge.
+
+```
+{"v":1,"op":"add","repo_root":"/abs/path/to/repo","at":"<iso8601>"}
+{"v":1,"op":"add","repo_root":"/abs/other/repo","at":"<iso8601>"}
 ```
 
-- `v` — registry version, `1`. A durable version contract (above).
-- `ledgers[]` — one entry per registered repo. `repo_root` is the
-  attribution root (the ledger lives at
-  `<repo_root>/.coreartifact/ledger.db`, the spool alongside it).
-  `added_at` is ISO-8601.
-- **Uniqueness by `repo_root`** — `init` re-run adds no duplicate entry
-  (R2). `log` iterates `ledgers[]`, opens/ingests each ledger, and unions
-  the `sessions` rows across all of them (R10).
+- **`addLedger` = one atomic `O_APPEND` of one line.** No read, no
+  read-modify-write, no lock. Concurrent `init` runs across parallel
+  worktrees cannot lose each other's entries — the same physics that makes
+  the spool safe (a single append of one line under the pipe-buffer size is
+  atomic on macOS and Linux).
+- **`readRegistry` folds the log into the current set**, deduping by
+  `repo_root` (last op for a root wins). It is **total**: a corrupt or
+  truncated line is skipped and counted, never thrown — a damaged registry
+  must never take down every command that reads it. A missing file folds to
+  the empty set.
+- **Idempotence is a property of the fold, not of the write.** Re-running
+  `init` appends a second `add` line for the same root; the fold still
+  yields exactly one entry (R2). The file grows only on repeated `init`,
+  which is rare; compaction is a v1.1 concern, not a v1 one.
+- **`op`** exists so PRD-0002's uninstall appends `{"op":"remove"}` (a
+  tombstone) rather than rewriting the file. Append-only stays append-only.
+- **`v`** — line-level version, `1`. A durable version contract (above):
+  each line carries it, so the format can evolve without a migration.
+
+This makes the architecture uniform: **append-only logs are ground truth
+everywhere; every readable structure is a fold over one.** The spool → the
+ledger. The registry log → the registry set.
 
 ---
 

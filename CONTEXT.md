@@ -15,8 +15,12 @@ and no synonyms. Created 2026-07-14 during the PRD-0001 grill.
   hook enriches beyond the envelope.
 - **ledger** — the per-repo SQLite database; a disposable, rebuildable
   projection of the spool.
-- **registry** — the single global plain-JSON list of known ledger roots;
-  what `log` unions across repos.
+- **registry** — the single global **append-only JSONL log** of known ledger
+  roots (`~/.coreartifact/registry.jsonl`). `addLedger` is one atomic
+  `O_APPEND`; `readRegistry` **folds** the log into the current set, deduping
+  by `repo_root` and skipping corrupt lines. No lock, no read-modify-write
+  (rewritten 2026-07-14 — the read-modify-write was the only one in the system
+  and the only source of concurrency bugs). What `log` unions across repos.
 - **facet** — one derived evidence column (shas, footprint, outcome, kind,
   later cost). A facet is ABSENT when its source is unavailable — absent
   is always distinguishable from empty, zero, or success (the degradation

@@ -55,7 +55,7 @@ blessed short alias, mentioned once in the README).
 ## Architecture rulings (interview, 2026-07-12)
 
 - **Storage: per-repo + global registry.** `.coreartifact/ledger.db` per
-  repo (gitignored by init); `~/.coreartifact/registry` lists known
+  repo (gitignored by init); `~/.coreartifact/registry.jsonl` lists known
   ledgers; the dashboard unions registered ledgers for the cross-repo
   "today" view. Repo = trust boundary; uninstall is per-repo and total.
 - **Write path: spool → lazy ingest.** Hooks do exactly one atomic
@@ -94,8 +94,12 @@ blessed short alias, mentioned once in the README).
   (crash-path firing is unverified — honesty over tidiness).
 - **Defaults (operator may veto):** dashboard = vite+react static assets
   served by the CLI's local server; transcripts are never copied — the
-  path is stored, the file stays Claude Code's; registry is a plain JSON
-  file; macOS/Linux are tier-1, Windows best-effort via WSL until demand.
+  path is stored, the file stays Claude Code's; registry is an **append-only
+  JSONL log** (amended 2026-07-14 — it was specced as a plain JSON file, and
+  the read-modify-write that shape forces cost three consecutive review rounds
+  to concurrency bugs; it is now the same append-and-fold pattern as the spool,
+  which deletes the bug class rather than fixing it); macOS/Linux are tier-1,
+  Windows best-effort via WSL until demand.
 
 ## Verified platform facts (2026-07-12, live docs — superseded in part by the 2026-07-13 smoke test below)
 

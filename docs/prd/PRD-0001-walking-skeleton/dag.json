@@ -16,9 +16,13 @@
       ],
       "files": {
         "owns": [
-          "src/core/**",
+          "src/core/envelope.ts",
+          "src/core/paths.ts",
+          "src/core/status.ts",
           "src/cli/index.ts",
-          "tests/unit/core/**"
+          "tests/unit/core/envelope.test.ts",
+          "tests/unit/core/paths.test.ts",
+          "tests/unit/core/status.test.ts"
         ],
         "touches": [
           "src/index.ts",
@@ -29,16 +33,78 @@
       },
       "spec": "docs/issues/ISS-0001.md",
       "acceptance": [
-        "parseEnvelope accepts a v1 envelope line and returns its ts and its event payload as the exact source text of the event member, byte-identical to the input slice; it rejects a line whose v is not 1, a line that is not JSON, and a line with no event member, returning a typed parse failure rather than throwing.",
-        "openLedger on a path with no database file creates the schema v1 tables meta, sessions, events and footprint plus the index on events(session_id, seq), and inserts the single meta row with schema_version 1, ingested_bytes 0 and lines_seen 0; opening the same path again returns the existing ledger without altering row counts.",
-        "The ledger rejects a sessions row whose status is outside open, closed-clean and closed-inferred, and a sessions row whose kind is outside headless and interactive, while accepting a NULL kind.",
-        "readRegistry on a missing registry file returns an empty ledger list rather than throwing; addLedger writes a v1 registry containing the repo root with an added-at timestamp, and calling addLedger again with the same repo root leaves exactly one entry for that root.",
-        "resolveAttribution given a cwd inside a git worktree returns the main repo root as the repo root and the worktree checkout path as the worktree path; given a cwd inside a main checkout it returns that root with an absent worktree path; given a non-git cwd it returns the supplied init root fallback.",
-        "resolveAttribution classifies a main checkout correctly even when the git dir is not at <repo_root>/.git and even when the cwd is reached by a symlinked path: given a submodule checkout (or a git init --separate-git-dir checkout) it returns that checkout as the repo root with an absent worktree path and never a repo root inside .git; given a symlinked cwd for a main checkout it returns an absent worktree path and the same repo root as the realpathed cwd returns.",
-        "addLedger neither loses updates nor wedges: N concurrent addLedger calls with distinct repo roots leave all N entries in the registry, and an addLedger run against a stale lock left by a dead holder completes rather than failing permanently.",
-        "openLedger creates its parent directory when absent rather than throwing.",
-        "deriveStatus returns closed-clean when an end timestamp is present, closed-inferred when there is no end timestamp and the last event is older than the staleness threshold constant of 12 hours, and open when there is no end timestamp and the last event is inside that threshold; recomputing with a newly supplied end timestamp returns closed-clean for an input that previously derived closed-inferred.",
+        "parseEnvelope accepts a v1 envelope line and returns its ts, a decoded view of the event for field promotion, and the event payload as the exact source text of the event member, byte-identical to the input slice; it rejects a line whose v is not 1, a line that is not JSON, and a line with no event member, returning a typed parse failure rather than throwing.",
+        "parseEnvelope does not blind-cast the git facet: a boundary line whose git.head is an empty string, null, or a non-string is a typed parse failure or yields an ABSENT head, never a fabricated value admitted into the typed contract.",
+        "serializeEnvelope emits exactly one line: for any payload, including one containing embedded newlines or control characters, the output contains no interior newline and re-parses through parseEnvelope to a byte-identical payload; and it never emits an empty-string git head (absent is key-omitted).",
+        "deriveStatus returns closed-clean only when an end timestamp is genuinely present - an empty string or undefined endedAt is NOT a captured SessionEnd and must not fabricate closed-clean; it returns closed-inferred when there is no end timestamp and the last event is older than the staleness threshold constant of 12 hours, and open when there is no end timestamp and the last event is inside that threshold; recomputing with a newly supplied end timestamp returns closed-clean for an input that previously derived closed-inferred.",
+        "The paths module exposes the spool, ledger, hook-artifact and registry locations, and the registry root is overridable by a named environment variable so a test subprocess never touches the operator's real home.",
         "Running the built CLI entry with no arguments exits 0 and prints usage naming the commands init, log and show; running it with an unknown command exits nonzero and names the unknown command."
+      ]
+    },
+    {
+      "id": "ISS-0010",
+      "kind": "contract",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0001"
+      ],
+      "db": true,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/core/ledger.ts",
+          "src/core/registry.ts",
+          "tests/unit/core/ledger.test.ts",
+          "tests/unit/core/registry.test.ts"
+        ],
+        "touches": [
+          "package.json",
+          "pnpm-lock.yaml"
+        ]
+      },
+      "spec": "docs/issues/ISS-0010.md",
+      "acceptance": [
+        "openLedger on a path with no database file creates the parent directory if absent, creates the schema v1 tables meta, sessions, events and footprint plus the index on events(session_id, seq), and inserts the single meta row with schema_version 1, ingested_bytes 0 and lines_seen 0; opening the same path again returns the existing ledger without altering row counts.",
+        "The ledger rejects a sessions row whose status is outside open, closed-clean and closed-inferred, and a sessions row whose kind is outside headless and interactive, while accepting a NULL kind.",
+        "addLedger appends exactly one line to the registry log and never reads it first: N concurrent addLedger calls with distinct repo roots yield a registry log whose fold contains all N roots, with no lock file created anywhere and no entry lost.",
+        "readRegistry is total: a missing registry file folds to an empty set rather than throwing, and a registry log containing a corrupt or truncated line skips that line, counts it, and still returns every valid entry - a damaged registry never takes down a command that reads it.",
+        "The registry fold dedupes by repo_root: running init twice for one repo appends two add lines and the fold still yields exactly one entry for that root."
+      ]
+    },
+    {
+      "id": "ISS-0011",
+      "kind": "contract",
+      "risk": "high",
+      "complexity": "s",
+      "depends_on": [
+        "ISS-0001"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/core/attribution.ts",
+          "tests/unit/core/attribution.test.ts"
+        ],
+        "touches": []
+      },
+      "spec": "docs/issues/ISS-0011.md",
+      "acceptance": [
+        "resolveAttribution given a cwd inside a linked git worktree returns the main repo root as the repo root and the worktree checkout path as the worktree path; given a cwd inside a main checkout it returns that root with an absent worktree path; given a non-git cwd it returns the supplied init root fallback with an absent worktree path.",
+        "resolveAttribution classifies a main checkout correctly when the git dir is not at <repo_root>/.git: given a submodule checkout, and given a git init --separate-git-dir checkout, it returns that checkout as the repo root with an absent worktree path, and never returns a repo root inside a .git directory.",
+        "resolveAttribution is stable under symlinked paths: given a main checkout reached by a symlinked cwd it returns an absent worktree path and the same repo root string that the realpathed cwd yields - one repo never resolves to two repo_root identities.",
+        "resolveAttribution ignores the ambient git environment: with GIT_DIR or GIT_WORK_TREE set in the environment to another repository, resolution still reflects the cwd's own repository, so a session's spool can never be redirected into an unrelated repo."
       ]
     },
     {
@@ -77,7 +143,9 @@
       "complexity": "m",
       "depends_on": [
         "ISS-0001",
-        "ISS-0002"
+        "ISS-0002",
+        "ISS-0010",
+        "ISS-0011"
       ],
       "db": false,
       "ui": false,
@@ -115,7 +183,8 @@
       "depends_on": [
         "ISS-0001",
         "ISS-0002",
-        "ISS-0003"
+        "ISS-0003",
+        "ISS-0011"
       ],
       "db": false,
       "ui": false,
@@ -151,7 +220,8 @@
       "depends_on": [
         "ISS-0001",
         "ISS-0003",
-        "ISS-0004"
+        "ISS-0004",
+        "ISS-0010"
       ],
       "db": false,
       "ui": false,
@@ -187,7 +257,9 @@
         "ISS-0001",
         "ISS-0003",
         "ISS-0004",
-        "ISS-0005"
+        "ISS-0005",
+        "ISS-0010",
+        "ISS-0011"
       ],
       "db": true,
       "ui": false,

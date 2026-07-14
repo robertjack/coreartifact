@@ -125,8 +125,10 @@ events(session_id, seq, ts, hook_event_name,
        prompt_id?, agent_id?, agent_type?, tool_use_id?, payload)
 ```
 
-Registry: one global plain-JSON file listing ledger roots with added-at
-timestamps.
+Registry: one global **append-only JSONL log** of ledger roots (`v`, `op`,
+`repo_root`, `at`), folded into a set on read and deduped by `repo_root`.
+Appended to with one atomic `O_APPEND`, never read-modify-written
+(2026-07-14 amendment — schema.md Surface 3 is normative).
 
 Hook artifact: self-contained and zero-dependency (must work in a repo
 with no node_modules), referenced by absolute path from the hook config;
