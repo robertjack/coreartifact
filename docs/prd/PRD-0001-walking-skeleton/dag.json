@@ -1,0 +1,324 @@
+{
+  "prd": "PRD-0001-walking-skeleton",
+  "issues": [
+    {
+      "id": "ISS-0001",
+      "kind": "contract",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/core/**",
+          "src/cli/index.ts",
+          "tests/unit/core/**"
+        ],
+        "touches": [
+          "src/index.ts",
+          "package.json",
+          "pnpm-lock.yaml",
+          "tsconfig.json"
+        ]
+      },
+      "spec": "docs/issues/ISS-0001.md",
+      "acceptance": [
+        "parseEnvelope accepts a v1 envelope line and returns its ts and its event payload as the exact source text of the event member, byte-identical to the input slice; it rejects a line whose v is not 1, a line that is not JSON, and a line with no event member, returning a typed parse failure rather than throwing.",
+        "openLedger on a path with no database file creates the schema v1 tables meta, sessions, events and footprint plus the index on events(session_id, seq), and inserts the single meta row with schema_version 1, ingested_bytes 0 and lines_seen 0; opening the same path again returns the existing ledger without altering row counts.",
+        "The ledger rejects a sessions row whose status is outside open, closed-clean and closed-inferred, and a sessions row whose kind is outside headless and interactive, while accepting a NULL kind.",
+        "readRegistry on a missing registry file returns an empty ledger list rather than throwing; addLedger writes a v1 registry containing the repo root with an added-at timestamp, and calling addLedger again with the same repo root leaves exactly one entry for that root.",
+        "resolveAttribution given a cwd inside a git worktree returns the main repo root as the repo root and the worktree checkout path as the worktree path; given a cwd inside a main checkout it returns that root with an absent worktree path; given a non-git cwd it returns the supplied init root fallback.",
+        "deriveStatus returns closed-clean when an end timestamp is present, closed-inferred when there is no end timestamp and the last event is older than the staleness threshold constant of 12 hours, and open when there is no end timestamp and the last event is inside that threshold; recomputing with a newly supplied end timestamp returns closed-clean for an input that previously derived closed-inferred.",
+        "Running the built CLI entry with no arguments exits 0 and prints usage naming the commands init, log and show; running it with an unknown command exits nonzero and names the unknown command."
+      ]
+    },
+    {
+      "id": "ISS-0002",
+      "kind": "contract",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "tests/fixtures/**",
+          "tests/unit/fixtures.test.ts",
+          "docs/recording-pass.md"
+        ],
+        "touches": []
+      },
+      "spec": "docs/issues/ISS-0002.md",
+      "acceptance": [
+        "R14 Fixtures (recording pass). Committed fixture streams cover: interactive, headless, worktree, SIGTERM, SIGKILL; each stamped with the Claude Code version it was recorded on; the WorktreeCreate payload shape is recorded.",
+        "Every committed fixture stream is a sequence of hook payloads, one JSON object per line, each carrying session_id, hook_event_name, cwd and transcript_path; a fixture manifest test parses every stream and fails naming any line that is not a JSON object or that lacks one of those four fields.",
+        "The fixture manifest records, per stream, the recorded Claude Code version, the scenario name and the hook event names in order; a test asserts the manifest lists exactly the five scenarios interactive, headless, worktree, SIGTERM and SIGKILL, and that every stream file named by the manifest exists.",
+        "A corrupt-line fixture exists whose middle line is not valid JSON while the lines before and after it are valid envelope-bearing payloads, so downstream ingest tests can assert skip-and-continue against a real file."
+      ]
+    },
+    {
+      "id": "ISS-0003",
+      "kind": "scaffold",
+      "risk": "med",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0001",
+        "ISS-0002"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "tests/acceptance/harness/**",
+          "tests/acceptance/harness.test.ts"
+        ],
+        "touches": [
+          "tests/scaffold.test.ts",
+          "vitest.config.ts",
+          "package.json",
+          "pnpm-lock.yaml"
+        ]
+      },
+      "spec": "docs/issues/ISS-0003.md",
+      "acceptance": [
+        "The harness tmpdir-repo factory creates a real git repository in a fresh temporary directory with an initial commit, returns its root, its isolated HOME and its isolated registry path, and removes the whole directory on cleanup; a self-test asserts the repo root is a git work tree and that the directory no longer exists after cleanup.",
+        "The harness CLI runner builds the CLI once per test run and invokes it as a subprocess in a given cwd with an isolated HOME and registry, returning exit code, stdout and stderr; a self-test asserts that running it with no arguments in a tmpdir repo exits 0 and prints usage naming init, log and show, and that running an unknown command exits nonzero.",
+        "The harness fixture replayer loads a fixture stream by scenario name and pipes each payload line into a given hook command on stdin, one invocation per line, in order, returning each invocation's exit code; a self-test replays the headless stream into a stub command that records its stdin and asserts one invocation per fixture line with the payload bytes delivered unchanged.",
+        "The harness worktree helper adds a real git worktree to a tmpdir repo and returns its checkout path; a self-test asserts the checkout exists and that its git common dir resolves to the main repo.",
+        "The placeholder test tests/scaffold.test.ts no longer exists in the tree."
+      ]
+    },
+    {
+      "id": "ISS-0004",
+      "kind": "feature",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0001",
+        "ISS-0002",
+        "ISS-0003"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/hook/**",
+          "tests/acceptance/hook.test.ts",
+          "tests/unit/hook/**"
+        ],
+        "touches": [
+          "package.json",
+          "pnpm-lock.yaml"
+        ]
+      },
+      "spec": "docs/issues/ISS-0004.md",
+      "acceptance": [
+        "R4 Capture. Replaying each recorded fixture stream through the installed hook command verbatim: one spool line per event; every line parses as envelope v1 with the payload byte-preserved; boundary lines carry head sha + dirty flag; N parallel interleaved replays lose zero lines (spool line count = sum of inputs).",
+        "The hook artifact exits 0 for every input, including a payload that is not valid JSON, an empty stdin, and a spool directory that does not exist; a capture failure never breaks the host session and never writes a partial line to the spool.",
+        "The hook artifact runs from a checkout with no node_modules present: invoking the built artifact by absolute path from a tmpdir git repo that has no node_modules directory appends the envelope line and exits 0.",
+        "A boundary payload delivered with a cwd whose git resolution fails records the git head and dirty keys as absent in the envelope rather than as an empty string, zero or false."
+      ]
+    },
+    {
+      "id": "ISS-0005",
+      "kind": "feature",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0001",
+        "ISS-0003",
+        "ISS-0004"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/cli/commands/init.ts",
+          "src/install/**",
+          "tests/acceptance/init.test.ts",
+          "tests/unit/install/**"
+        ],
+        "touches": [
+          "src/cli/index.ts"
+        ]
+      },
+      "spec": "docs/issues/ISS-0005.md",
+      "acceptance": [
+        "R1 Install. After init in a fresh tmpdir git repo: exit 0; stdout inventories exactly what was installed (hook config, hook artifact, spool + ledger location, gitignore line, registry entry); the repo tree diff shows ONLY those additions. The hook config subscribes SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd, WorktreeCreate, WorktreeRemove.",
+        "R2 Init idempotence + merge. Re-running init: exit 0, no duplicate hook entries, no duplicate registry entry. A pre-existing settings file with unrelated user keys keeps those keys intact.",
+        "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree. Replaying a WorktreeCreate fixture through the installed hook: the settings file appears in the new worktree's checkout AND the event lands in the spool."
+      ]
+    },
+    {
+      "id": "ISS-0006",
+      "kind": "feature",
+      "risk": "high",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0001",
+        "ISS-0003",
+        "ISS-0004",
+        "ISS-0005"
+      ],
+      "db": true,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/ingest/**",
+          "src/cli/commands/log.ts",
+          "tests/acceptance/ingest.test.ts",
+          "tests/unit/ingest/**"
+        ],
+        "touches": [
+          "src/cli/index.ts",
+          "src/core/**"
+        ]
+      },
+      "spec": "docs/issues/ISS-0006.md",
+      "acceptance": [
+        "R5 Worktree capture + attribution. The hook invoked with a worktree cwd appends to the main checkout's spool; after ingest the session row carries the main repo root with the worktree path recorded. A non-git cwd falls back to the init root.",
+        "R6 Ingest. Running log ingests the spool: session and event rows appear. Re-running changes zero row counts (idempotent). Deleting the ledger and re-running rebuilds equivalent rows (the spool is ground truth). A corrupt line is skipped, counted, and named in output, and every subsequent line still ingests. Events of concurrent sessions interleaved in one spool group by session id.",
+        "R7 Status. SessionEnd present gives closed-clean. Absent with the last event older than the staleness threshold (named constant, 12h) gives closed-inferred. Absent and recent gives open. A late-ingested SessionEnd flips closed-inferred back to closed-clean; status is recomputed on every ingest, never a one-way door.",
+        "R9 Kind. Session kind (headless or interactive) is populated iff the recording pass finds a discriminating signal in real payloads (fixture-verified); otherwise it records ABSENT. Never inferred heuristically.",
+        "Ingest never mutates the spool: after running log twice over a replayed stream, the spool file's bytes are identical to what capture wrote.",
+        "The footprint table holds the distinct file paths from a session's file-editing tool events, with no duplicate rows for a path edited twice and no rows contributed by Bash commands that write files."
+      ]
+    },
+    {
+      "id": "ISS-0007",
+      "kind": "feature",
+      "risk": "low",
+      "complexity": "s",
+      "depends_on": [
+        "ISS-0006"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/render/log.ts",
+          "src/render/absent.ts",
+          "src/worktree-gap.ts",
+          "tests/acceptance/log.test.ts",
+          "tests/unit/render/**"
+        ],
+        "touches": [
+          "src/cli/commands/log.ts",
+          "src/ingest/**",
+          "src/core/registry.ts"
+        ]
+      },
+      "spec": "docs/issues/ISS-0007.md",
+      "acceptance": [
+        "R10 Log. One line per session containing at minimum: short id, repo, status, kind-or-absent, start time, command count, footprint count. With two registered repos, log unions both. Ingest emits a warning naming any worktree missing the settings file and stays silent when propagation is complete.",
+        "log in a repo with no sessions exits 0 and prints an explicit empty-state line rather than nothing, and log run outside any registered repo exits 0 and says so."
+      ]
+    },
+    {
+      "id": "ISS-0008",
+      "kind": "feature",
+      "risk": "med",
+      "complexity": "m",
+      "depends_on": [
+        "ISS-0006",
+        "ISS-0007"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/cli/commands/show.ts",
+          "src/render/show.ts",
+          "src/facets/**",
+          "tests/acceptance/show.test.ts",
+          "tests/unit/facets/**"
+        ],
+        "touches": [
+          "src/cli/index.ts",
+          "src/render/log.ts",
+          "src/render/absent.ts"
+        ]
+      },
+      "spec": "docs/issues/ISS-0008.md",
+      "acceptance": [
+        "R8 Facets. Per session: sha before/after from boundary lines; footprint = distinct file paths from file-editing tool events; every Bash command records its command string, outcome, and duration; a PostToolUseFailure records a failure outcome with its error string preserved; an auto-backgrounded command records outcome ABSENT, distinguishable from both success and failure.",
+        "R11 Show. show <session> prints a flat chronological timeline - lifecycle events, prompts, every command with outcome + duration, subagent events with agent id/type - headed by shas and footprint. An unknown session id exits nonzero with an error naming the id.",
+        "R12 Degradation rendering. In log and show, an absent facet renders as an explicit absent marker, distinguishable from empty/zero/success - asserted for sha-absent, kind-absent, and outcome-absent."
+      ]
+    },
+    {
+      "id": "ISS-0009",
+      "kind": "feature",
+      "risk": "med",
+      "complexity": "s",
+      "depends_on": [
+        "ISS-0003",
+        "ISS-0007"
+      ],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "tests/acceptance/packaging.test.ts"
+        ],
+        "touches": [
+          "package.json",
+          "pnpm-lock.yaml",
+          "src/cli/index.ts",
+          ".npmignore"
+        ]
+      },
+      "spec": "docs/issues/ISS-0009.md",
+      "acceptance": [
+        "R13 Packaging. The packed tarball installs into a tmpdir and exposes bins coreartifact and cart; cart log output is identical to coreartifact log. (The npx path is checked via pack + install, not the live registry.)",
+        "The packed tarball contains the built hook artifact, and init run from the installed package copies that artifact into the target repo and exits 0."
+      ]
+    }
+  ]
+}

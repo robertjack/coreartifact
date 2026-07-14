@@ -1,0 +1,104 @@
+{
+  "prdId": "PRD-0001",
+  "issues": [
+    {
+      "id": "ISS-0001",
+      "path": "docs/issues/ISS-0001.md"
+    },
+    {
+      "id": "ISS-0002",
+      "path": "docs/issues/ISS-0002.md"
+    },
+    {
+      "id": "ISS-0003",
+      "path": "docs/issues/ISS-0003.md"
+    },
+    {
+      "id": "ISS-0004",
+      "path": "docs/issues/ISS-0004.md"
+    },
+    {
+      "id": "ISS-0005",
+      "path": "docs/issues/ISS-0005.md"
+    },
+    {
+      "id": "ISS-0006",
+      "path": "docs/issues/ISS-0006.md"
+    },
+    {
+      "id": "ISS-0007",
+      "path": "docs/issues/ISS-0007.md"
+    },
+    {
+      "id": "ISS-0008",
+      "path": "docs/issues/ISS-0008.md"
+    },
+    {
+      "id": "ISS-0009",
+      "path": "docs/issues/ISS-0009.md"
+    }
+  ],
+  "criteria": [
+    {
+      "criterion": "R1 Install. After init in a fresh tmpdir git repo: exit 0; stdout inventories exactly what was installed (hook config, hook artifact, spool + ledger location, gitignore line, registry entry); the repo tree diff shows ONLY those additions. The hook config subscribes SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd, WorktreeCreate, WorktreeRemove.",
+      "issueId": "ISS-0005"
+    },
+    {
+      "criterion": "R2 Init idempotence + merge. Re-running init: exit 0, no duplicate hook entries, no duplicate registry entry. A pre-existing settings file with unrelated user keys keeps those keys intact.",
+      "issueId": "ISS-0005"
+    },
+    {
+      "criterion": "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree. Replaying a WorktreeCreate fixture through the installed hook: the settings file appears in the new worktree's checkout AND the event lands in the spool.",
+      "issueId": "ISS-0005"
+    },
+    {
+      "criterion": "R4 Capture. Replaying each recorded fixture stream through the installed hook command verbatim: one spool line per event; every line parses as envelope v1 with the payload byte-preserved; boundary lines carry head sha + dirty flag; N parallel interleaved replays lose zero lines (spool line count = sum of inputs).",
+      "issueId": "ISS-0004"
+    },
+    {
+      "criterion": "R5 Worktree capture + attribution. The hook invoked with a worktree cwd appends to the main checkout's spool; after ingest the session row carries the main repo root with the worktree path recorded. A non-git cwd falls back to the init root.",
+      "issueId": "ISS-0006"
+    },
+    {
+      "criterion": "R6 Ingest. Running log ingests the spool: session and event rows appear. Re-running changes zero row counts (idempotent). Deleting the ledger and re-running rebuilds equivalent rows (the spool is ground truth). A corrupt line is skipped, counted, and named in output, and every subsequent line still ingests. Events of concurrent sessions interleaved in one spool group by session id.",
+      "issueId": "ISS-0006"
+    },
+    {
+      "criterion": "R7 Status. SessionEnd present gives closed-clean. Absent with the last event older than the staleness threshold (named constant, 12h) gives closed-inferred. Absent and recent gives open. A late-ingested SessionEnd flips closed-inferred back to closed-clean; status is recomputed on every ingest, never a one-way door.",
+      "issueId": "ISS-0006"
+    },
+    {
+      "criterion": "R8 Facets. Per session: sha before/after from boundary lines; footprint = distinct file paths from file-editing tool events; every Bash command records its command string, outcome, and duration; a PostToolUseFailure records a failure outcome with its error string preserved; an auto-backgrounded command records outcome ABSENT, distinguishable from both success and failure.",
+      "issueId": "ISS-0008"
+    },
+    {
+      "criterion": "R9 Kind. Session kind (headless or interactive) is populated iff the recording pass finds a discriminating signal in real payloads (fixture-verified); otherwise it records ABSENT. Never inferred heuristically.",
+      "issueId": "ISS-0006"
+    },
+    {
+      "criterion": "R10 Log. One line per session containing at minimum: short id, repo, status, kind-or-absent, start time, command count, footprint count. With two registered repos, log unions both. Ingest emits a warning naming any worktree missing the settings file and stays silent when propagation is complete.",
+      "issueId": "ISS-0007"
+    },
+    {
+      "criterion": "R11 Show. show <session> prints a flat chronological timeline - lifecycle events, prompts, every command with outcome + duration, subagent events with agent id/type - headed by shas and footprint. An unknown session id exits nonzero with an error naming the id.",
+      "issueId": "ISS-0008"
+    },
+    {
+      "criterion": "R12 Degradation rendering. In log and show, an absent facet renders as an explicit absent marker, distinguishable from empty/zero/success - asserted for sha-absent, kind-absent, and outcome-absent.",
+      "issueId": "ISS-0008"
+    },
+    {
+      "criterion": "R13 Packaging. The packed tarball installs into a tmpdir and exposes bins coreartifact and cart; cart log output is identical to coreartifact log. (The npx path is checked via pack + install, not the live registry.)",
+      "issueId": "ISS-0009"
+    },
+    {
+      "criterion": "R14 Fixtures (recording pass). Committed fixture streams cover: interactive, headless, worktree, SIGTERM, SIGKILL; each stamped with the Claude Code version it was recorded on; the WorktreeCreate payload shape is recorded.",
+      "issueId": "ISS-0002"
+    }
+  ],
+  "driftNotes": [
+    "spec-v1.md line 75 (Architecture rulings, 'Granularity: flat stream') still names the nesting keys as `prompt_id`, `subagent_id`, `tool_use_id`. The 2026-07-13 smoke test in the same file (line 144) observed the real names as `prompt_id`, `tool_use_id`, `agent_id` + `agent_type`, and states explicitly that there is no `subagent_id`; CONTEXT.md and schema.md both codify `agent_id` as canonical. The architecture ruling was not updated when the finding landed. Issue specs use `agent_id` throughout. Fix the stale ruling line in spec-v1.md.",
+    "spec-v1.md line 72 (Architecture rulings, 'Attribution') asserts that 'headless sessions are captured and tagged `headless`'. That tagging claim is contradicted by the smoke test (no cost/discriminating signal observed) and by PRD-0001 R9 + CONTEXT.md, which make `kind` nullable and populated only from a fixture-verified discriminating signal, honest-absent otherwise. The ruling reads as a settled capability but is in fact an open risk (PRD open risk 2). Soften or annotate the ruling in spec-v1.md so it does not license a heuristic implementation.",
+    "There is no docs/map.md in the repo — the ownership map that the decomposer's read-only pass expects does not exist yet (the tree is a bare scaffold: src/index.ts, tests/scaffold.test.ts). Nothing is misplaced; the store is simply absent. Worth creating once PRD-0001's modules land, since PRD-0002 and PRD-0003 will both plan against them."
+  ]
+}
