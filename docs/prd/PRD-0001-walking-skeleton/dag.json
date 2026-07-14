@@ -20,6 +20,7 @@
           "src/core/paths.ts",
           "src/core/status.ts",
           "src/cli/index.ts",
+          "src/cli/bin.ts",
           "tests/unit/core/envelope.test.ts",
           "tests/unit/core/paths.test.ts",
           "tests/unit/core/status.test.ts"
@@ -38,7 +39,10 @@
         "serializeEnvelope emits exactly one line: for any payload, including one containing embedded newlines or control characters, the output contains no interior newline and re-parses through parseEnvelope to a byte-identical payload; and it never emits an empty-string git head (absent is key-omitted).",
         "deriveStatus returns closed-clean only when an end timestamp is genuinely present - an empty string or undefined endedAt is NOT a captured SessionEnd and must not fabricate closed-clean; it returns closed-inferred when there is no end timestamp and the last event is older than the staleness threshold constant of 12 hours, and open when there is no end timestamp and the last event is inside that threshold; recomputing with a newly supplied end timestamp returns closed-clean for an input that previously derived closed-inferred.",
         "The paths module exposes the spool, ledger, hook-artifact and registry locations, and the registry root is overridable by a named environment variable so a test subprocess never touches the operator's real home.",
-        "Running the built CLI entry with no arguments exits 0 and prints usage naming the commands init, log and show; running it with an unknown command exits nonzero and names the unknown command."
+        "Running the built CLI entry with no arguments exits 0 and prints usage naming the commands init, log and show; running it with an unknown command exits nonzero and names the unknown command.",
+        "The shipped bin behaves identically when invoked through a symlink (as node_modules/.bin installs it) and from a directory path containing an @ character (as pnpm's store lays it out): usage on no args with exit 0, and a nonzero exit naming the command on an unknown one. It never exits 0 silently.",
+        "Importing the CLI module from another module returns normally, exports both main and the command table, and does not terminate the importing process.",
+        "serializeEnvelope never throws on any input, including a BigInt, a circular object, and a value whose toJSON throws: each returns a typed failure."
       ]
     },
     {

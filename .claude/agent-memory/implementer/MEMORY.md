@@ -1,0 +1,1 @@
+- [Escape sequences in Write/Edit tool params](feedback_escape_sequences_in_tool_writes.md) — typing `\x00` in a tool call can insert a raw byte, not escape text; verify with a byte-level check, not Read.

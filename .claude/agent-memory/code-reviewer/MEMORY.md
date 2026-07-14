@@ -1,0 +1,1 @@
+- [Review defect patterns](review_defect_patterns.md) — green gates ≠ met acceptance; the acceptance tests are agent-written happy-path restatements. Break vectors that work here.
