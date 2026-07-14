@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && printf \"import { main } from './cli/index.js';\\nmain(process.argv.slice(2));\\n\" > dist/cli.js",
     "dev": "tsc --watch",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
