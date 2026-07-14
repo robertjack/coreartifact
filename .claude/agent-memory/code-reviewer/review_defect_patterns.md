@@ -46,7 +46,15 @@ executing the built code (`dist/`) against adversarial inputs yourself. Specific
    mis-handles octal escapes and will report clean. A fix commit claiming "escaped the NUL + scanned
    all files" instead *introduced* a raw `0x01` byte. `git diff --numstat` showing no `-`/`Bin` only
    proves git's NUL heuristic didn't trip, not that the bytes are clean.
-5. **U+2028/U+2029 is a red herring here** — `JSON.stringify` leaves them raw in the line, but the
+5. **The catch block is part of the totality contract.** The usual fix for "JSON.stringify throws"
+   is `try { ... } catch (err) { return { ok: false, reason: \`...: ${String(err)}\` } }` — but
+   `String(err)` *itself* throws when the thrown value has a hostile `Symbol.toPrimitive` /
+   `toString` / `message` getter, so the exception escapes the function that promises never to
+   throw. A "never throws" wrapper must not stringify an attacker-controlled thrown value; use a
+   fixed reason string, or `err instanceof Error ? err.name : "non-Error"`. Found on ISS-0001
+   rescue-fix (V2, executed 2026-07-14). Low reachability (JSON-decoded payloads have no getters)
+   but it is the literal wording of the criterion.
+6. **U+2028/U+2029 is a red herring here** — `JSON.stringify` leaves them raw in the line, but the
    spool splits strictly on `\n`, so they are harmless. Verified; do not inflate it into a finding.
 
 Prior ladder history: ISS-0001 burned two attempt ladders; escalated branches

@@ -1,1 +1,3 @@
 - [Escape sequences in Write/Edit tool params](feedback_escape_sequences_in_tool_writes.md) — typing `\x00` in a tool call can insert a raw byte, not escape text; verify with a byte-level check, not Read.
+- [Validate before transform in spool code](feedback_validate_before_transform_spool.md) — run control-char rejection before `.trim()`/normalizing transforms, or the transform silently defeats the check.
+- [tests/acceptance/** writable in practice](reference_tests_acceptance_writable_in_practice.md) — the stated read-only law isn't tool-enforced here; still self-police, only edit for spec-mandated mechanical changes.
