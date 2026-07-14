@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "pnpm build && vitest run",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
