@@ -23,18 +23,26 @@ describe("recording-pass fixture manifest", () => {
     expect(scenarios).toEqual([...SCENARIOS].sort());
   });
 
-  it("every stream is version-stamped, records ordered hook events, and exists on disk", () => {
+  it("every stream is version-stamped, exists on disk, and its manifest events match the file's actual hook_event_name sequence", () => {
     const manifest = loadManifest();
     for (const scenario of SCENARIOS) {
       const entry = manifest.streams.find((s) => s.scenario === scenario);
       expect(entry, `manifest entry for "${scenario}"`).toBeTruthy();
       if (!entry) continue;
 
-      expect(entry.claudeCodeVersion, `Claude Code version stamp for "${scenario}"`).toBeTruthy();
+      expect(entry.claudeCodeVersion, `Claude Code version stamp for "${scenario}"`).toMatch(
+        /^\d+\.\d+\.\d+$/,
+      );
       expect(entry.events.length, `ordered hook events for "${scenario}"`).toBeGreaterThan(0);
 
       const filePath = path.join(FIXTURES_DIR, entry.file);
       expect(fs.existsSync(filePath), `stream file for "${scenario}" exists at ${filePath}`).toBe(true);
+
+      const lines = readJsonLines(filePath);
+      const actualEvents = lines.map((line) => JSON.parse(line).hook_event_name);
+      expect(actualEvents, `manifest "events" for "${scenario}" must match ${entry.file}'s actual hook_event_name sequence`).toEqual(
+        entry.events,
+      );
     }
   });
 
