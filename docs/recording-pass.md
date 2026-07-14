@@ -15,7 +15,14 @@ per-scenario stream file. Streams live at `tests/fixtures/<scenario>.jsonl`
 | worktree | `worktree.jsonl` | recorded (26 events, three sessions — see below) |
 | SIGTERM | `sigterm.jsonl` | recorded (23 events) |
 | SIGKILL | `sigkill.jsonl` | recorded (6 events) |
-| interactive | `interactive.jsonl` | **pending — operator keyboard session** |
+| interactive | `interactive.jsonl` | recorded (18 events, operator keyboard session 2026-07-14) |
+
+The interactive stream is a real keyboard session (the PTY could not be
+scripted — Claude Code's TUI does not ingest keystrokes from a spawned
+pty, so this one is operator-recorded). It carries a successful Bash
+command, a `PostToolUseFailure` (`Exit code 1`), a Read + Edit pair, and a
+clean `/exit`. It also closes spec-v1's standing operator-lane item: one
+interactive session eyeballed end to end.
 
 The headless stream contains every payload variant the facet criteria
 need: Bash `PostToolUse` with `tool_input.command` / `tool_response` /
@@ -65,18 +72,60 @@ cwd is a worktree, which the init-time copy and the warning cover.
   Ingest must tolerate events after a session's end event; ordering is by
   spool line, not by lifecycle assumptions.
 
-## The kind question (open risk 2) — pending the interactive stream
+## FINDING 3: the kind question (open risk 2) — ANSWERED, a signal exists
 
-Headless `SessionStart` carries exactly:
-`cwd, hook_event_name, session_id, source, transcript_path` with
-`source: "startup"`. Whether interactive sessions differ (in `source` or
-any other field) is decided by diffing the interactive stream when
-recorded. If no field discriminates, `kind` records ABSENT permanently
-this campaign — never inferred heuristically.
+**`SessionStart` carries a `model` key if and only if the session is
+interactive.** Ingest reads exactly this field: `model` present → `kind =
+interactive`; `model` absent → `kind = headless`. Nothing else. No
+heuristic (an absent UserPromptSubmit does NOT mean headless).
 
-Note: `permission_mode` appears on tool events (recorded value here:
-`bypassPermissions`, an artifact of the recording setup, not a headless
-signal — interactive sessions can run any permission mode).
+`source` is **not** the signal — it is `"startup"` in both modes.
+
+The evidence is a controlled 2×2, because the obvious reading was
+confounded: every headless stream above was recorded with `--model haiku`,
+so "interactive has `model`, headless doesn't" could equally have meant
+"the key appears when no `--model` flag was passed." A control run
+(headless, **no** `--model` flag) disambiguates:
+
+| session | `model` on SessionStart |
+|---|---|
+| headless, `--model haiku` | absent |
+| headless, default model (control) | absent |
+| interactive, default model | **present** (`claude-fable-5`) |
+
+Both headless cells lack it regardless of the flag, so absence is a
+property of headless, not of the flag. The fourth cell (interactive with
+an explicit `--model`) is not needed for that conclusion.
+
+**A near-miss worth recording:** `effort` on `Stop` looked like a second
+discriminator (present in interactive, absent in the `--model haiku`
+headless stream) — but the control shows headless-with-default-model
+*does* carry `effort`. It tracks the model, not the session mode. Had the
+control not been run, `effort` would have shipped as a false signal, and
+every default-model headless session would have been mislabeled
+interactive. This is exactly why the recording pass exists.
+
+**Fragility, and the honest fallback:** `model` is an undocumented payload
+field. If a future Claude Code release drops it, `kind` degrades to
+ABSENT — which the schema already permits (the column is nullable and
+NULL means ABSENT). It must never degrade to a *guess*.
+
+Note: `permission_mode` appears on tool events (recorded value in the
+headless streams: `bypassPermissions`, an artifact of the recording setup,
+not a headless signal — interactive sessions can run any permission mode).
+
+## FINDING 4: SessionEnd `reason` — refines the 2026-07-13 claim
+
+The smoke test concluded `reason` "does not discriminate" (it was `other`
+for both clean headless completion and SIGTERM). True *within* headless,
+and it stands as the basis for the `closed-clean` vs `closed-inferred`
+rule (presence/absence of the SessionEnd event, nothing finer). But
+interactive adds a third value: a clean `/exit` yields
+`reason: "prompt_input_exit"`, where headless clean completion yields
+`other`. It is an **end-reason** signal, not a session-kind one, and it is
+useless for crashed sessions (SIGKILL emits no SessionEnd at all), so no
+requirement reads it in v1. Recorded so a later facet does not have to
+rediscover it.
 
 ## Latency (open risk 5) — method, measurement pending the artifact
 

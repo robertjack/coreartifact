@@ -202,9 +202,13 @@ Windows-native support (WSL best-effort).
    top-level sessions in post-init worktrees stay uncaptured until the
    warning names them. Revisit if the platform adds a notification-style
    worktree event.
-2. **Headless discrimination may not exist** on current Claude Code — R9
-   then lands as permanently-absent kind; revisit when the platform grows
-   a signal.
+2. **Headless discrimination — RESOLVED 2026-07-14 (recording pass), a
+   signal exists.** `SessionStart` carries a `model` key iff the session is
+   interactive (controlled 2×2; `source` is `"startup"` in both modes, and
+   `effort` proved a false signal that a control run caught). R9 populates
+   `kind` from exactly that field. Residual: the field is undocumented — if
+   a release drops it, `kind` degrades to ABSENT (nullable by design),
+   never to a guess.
 3. **Backgrounded-command final outcome unverified** — outcome-absent
    stands; revisit at PRD-0002 alongside doctor.
 4. **Hook drift across Claude Code upgrades** — fixtures pin the recorded
