@@ -49,4 +49,25 @@ describe('envelope (unit)', () => {
     const line = serializeEnvelope({ ts: '2026-07-14T10:00:00.000Z', eventText: '{"a":1}' });
     expect(line.includes('"git"')).toBe(false);
   });
+
+  it('returns a decoded event view alongside the raw event text, so consumers can read nesting keys without re-parsing eventText themselves', () => {
+    const eventText = '{"hook_event_name":"PreToolUse","agent_id":"agent-7","tool_use_id":"tu-1","z":1,"a":2}';
+    const line = `{"v":1,"ts":"2026-07-14T10:00:00.000Z","event":${eventText}}`;
+
+    const result = parseEnvelope(line);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok result');
+
+    expect(result.event).toEqual({
+      hook_event_name: 'PreToolUse',
+      agent_id: 'agent-7',
+      tool_use_id: 'tu-1',
+      z: 1,
+      a: 2,
+    });
+    // The decoded view is a separate value from the raw text — mutating it
+    // must never affect the byte-preserved source slice ingest persists.
+    (result.event as Record<string, unknown>).z = 999;
+    expect(result.eventText).toBe(eventText);
+  });
 });

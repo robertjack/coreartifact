@@ -16,7 +16,7 @@ export interface Envelope {
 }
 
 export type ParseEnvelopeResult =
-  | { ok: true; envelope: Envelope; eventText: string }
+  | { ok: true; envelope: Envelope; event: unknown; eventText: string }
   | { ok: false; reason: string };
 
 // Scans a single JSON value starting at `start` (the value's first
@@ -177,7 +177,12 @@ export function parseEnvelope(line: string): ParseEnvelopeResult {
     envelope.git = obj.git as EnvelopeGit;
   }
 
-  return { ok: true, envelope, eventText };
+  // `event` is the decoded view, for consumers reading nesting keys (e.g.
+  // ingest promoting agent_id / tool_use_id / prompt_id). `eventText` is the
+  // raw source slice, the only one ingest may persist — keeping them as
+  // separate members means a caller reading fields off `event` never holds a
+  // handle that round-trips through JSON.stringify back into storage.
+  return { ok: true, envelope, event: obj.event, eventText };
 }
 
 export interface SerializeEnvelopeInput {

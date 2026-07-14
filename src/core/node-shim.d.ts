@@ -21,6 +21,8 @@ declare const process: {
   stderr: { write(chunk: string): boolean };
 };
 
+declare function setTimeout(callback: () => void, ms?: number): unknown;
+
 declare module 'node:path' {
   export function join(...parts: string[]): string;
   export function dirname(p: string): string;
@@ -31,11 +33,20 @@ declare module 'node:os' {
   export function homedir(): string;
 }
 
+declare module 'node:fs' {
+  export function realpathSync(path: string): string;
+}
+
 declare module 'node:fs/promises' {
   export function readFile(path: string, encoding: 'utf8'): Promise<string>;
   export function writeFile(path: string, data: string): Promise<void>;
   export function rename(oldPath: string, newPath: string): Promise<void>;
   export function mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
+  export function unlink(path: string): Promise<void>;
+  export interface FileHandle {
+    close(): Promise<void>;
+  }
+  export function open(path: string, flags: string): Promise<FileHandle>;
 }
 
 declare module 'node:child_process' {

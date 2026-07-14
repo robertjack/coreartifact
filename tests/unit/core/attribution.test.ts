@@ -45,4 +45,27 @@ describe('attribution (unit)', () => {
     expect(result.repoRoot).toBe(mainRepo);
     expect(result.worktreePath).toBe(resolvedWorktreePath);
   });
+
+  it('treats a main checkout the same whether the caller passes the logical (symlinked) cwd or its realpath: worktree path stays absent and repoRoot is one single identity', async () => {
+    // Deliberately skip the realpathSync normalization makeMainRepo's sibling
+    // helpers apply, so this directory keeps whatever symlink component its
+    // tmpdir has (e.g. macOS /tmp -> /private/tmp) — the exact shape that let
+    // a main checkout fall into the worktree branch before the fix.
+    const logicalDir = mkdtempSync(join(tmpdir(), 'coreartifact-attr-unit-logical-'));
+    git(logicalDir, 'init', '-q');
+    git(logicalDir, 'config', 'user.email', 'test@example.com');
+    git(logicalDir, 'config', 'user.name', 'Test');
+    execFileSync('bash', ['-c', 'echo hello > file.txt'], { cwd: logicalDir });
+    git(logicalDir, 'add', '.');
+    git(logicalDir, 'commit', '-q', '-m', 'initial commit');
+
+    const realDir = realpathSync(logicalDir);
+
+    const fromLogical = await resolveAttribution(logicalDir, '/tmp/fallback');
+    const fromReal = await resolveAttribution(realDir, '/tmp/fallback');
+
+    expect(fromLogical.worktreePath).toBeNull();
+    expect(fromReal.worktreePath).toBeNull();
+    expect(fromLogical.repoRoot).toBe(fromReal.repoRoot);
+  });
 });

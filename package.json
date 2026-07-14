@@ -8,11 +8,11 @@
   "scripts": {
     "build": "tsc && printf \"import { main } from './cli/index.js';\\nmain(process.argv.slice(2));\\n\" > dist/cli.js",
     "dev": "tsc --watch",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "packageManager": "pnpm@9.15.0",
   "devDependencies": {

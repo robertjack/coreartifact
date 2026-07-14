@@ -42,4 +42,14 @@ describe('registry (unit)', () => {
     const registry = await readRegistry(nestedPath);
     expect(registry.ledgers).toHaveLength(1);
   });
+
+  it('serializes concurrent addLedger calls so no update is lost to a read-modify-write race', async () => {
+    const registryPath = tmpRegistryPath();
+    const roots = Array.from({ length: 10 }, (_, i) => `/tmp/concurrent-repo-${i}`);
+
+    await Promise.all(roots.map((root) => addLedger(registryPath, root)));
+
+    const registry = await readRegistry(registryPath);
+    expect(registry.ledgers.map((e) => e.repo_root).sort()).toEqual([...roots].sort());
+  });
 });
