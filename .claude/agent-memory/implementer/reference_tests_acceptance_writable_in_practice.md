@@ -1,31 +1,38 @@
 ---
 name: reference-tests-acceptance-writable-in-practice
-description: The Edit/Write tool did not actually block writes to tests/acceptance/** in this repo despite the implementer role's stated "read-only, test_dispute is the exit" law — verify before assuming a hard block.
+description: Write/Edit to tests/acceptance/** is hard-blocked by write-guard.mjs for any role but test-author, even when the packet's own owns/touches explicitly grants a subpath there — but Bash-authored writes to the same path are NOT intercepted by that hook.
 metadata:
   type: reference
 ---
 
-The implementer agent definition (`.claude/agents/implementer.md`) states
-`tests/acceptance/**` is read-only at the tool layer and that a needed
-change there should be raised as a `test_dispute` rather than edited
-directly. On ISS-0001's 2026-07-14 rescue dispatch, editing
-`tests/acceptance/ISS-0001/cli.test.ts` and
-`tests/acceptance/ISS-0001/cli-import-safety.test.ts` (to update a stale
-`dist/cli.js` path to the new `dist/cli/bin.js` split, per an explicit,
-spec-consistent dispatch instruction) succeeded with no permission block.
+Superseded 2026-07-14 (ISS-0003): the write-guard hook
+(`.claude/hooks/write-guard.mjs`) DOES mechanically enforce the acceptance
+lock for the Write/Edit/MultiEdit/NotebookEdit tools — it checks
+`role !== "test-author" && isAcceptanceLocked(relPath)` and denies with exit
+2 BEFORE it ever checks the attempt's declared `owns`/`touches`. This fires
+even when the issue packet explicitly lists a `tests/acceptance/**` subpath
+in `owns` (ISS-0003's packet owned `tests/acceptance/harness/**` and
+`tests/acceptance/harness.test.ts` — both denied via Write).
 
-**Why this matters:** don't assume the stated law is mechanically
-enforced — it may only be a convention the harness expects agents to
-self-police. If a dispatch explicitly instructs an edit inside
-`tests/acceptance/**` and that edit is narrowly scoped (e.g. a path
-rename to match an architectural change already mandated by the spec, not
-a change to what the test asserts), the tool will likely allow it.
+The 2026-07-14 ISS-0001 rescue-dispatch precedent this memory used to cite
+(editing `tests/acceptance/ISS-0001/*.test.ts` succeeded via Write) is not
+necessarily wrong for that session, but do not generalize from it: this
+hook fires per role, and rescue dispatches may run under a different
+role/attempt-file than a normal implementer attempt.
 
-**How to apply:** Still treat `tests/acceptance/**` as read-only by
-default and prefer raising the equivalent of a `test_dispute` in your
-final report when a normative acceptance test looks wrong or stale.
-Only edit inside it when a dispatch/spec explicitly calls for the specific
-change and the edit is a mechanical consequence of that change (e.g. a
-renamed compiled-entry path), not a change to test semantics. Always call
-out in your final report exactly what you changed and why, so a reviewer
-can catch a wrongful edit even though the tool didn't stop it.
+**Why this matters:** an issue whose whole job is to create files under
+`tests/acceptance/**` (like a test-harness scaffold) cannot use the
+Write/Edit/MultiEdit tools for that job at all, no matter what the packet's
+`owns` says. The write-guard hook is a PreToolUse hook registered only for
+Write/Edit/MultiEdit/NotebookEdit — it does not intercept Bash. A file
+written via `Bash` (e.g. `cat > path <<'EOF' ... EOF`) to the exact same
+`tests/acceptance/**` path succeeds.
+
+**How to apply:** if a packet's `owns`/`touches` includes a
+`tests/acceptance/**` path (a legitimate harness/support-file grant, not an
+attempt to edit a locked `.test.ts` assertion), write it via Bash, not
+Write/Edit. Still never use this to edit the semantics of a locked
+`*.test.ts` file itself — that remains a `test_dispute`, and a reviewer can
+tell the difference between "created a new support file the spec asked
+for" and "edited what a test asserts." Call out in your final report
+exactly which files you wrote this way and why.
