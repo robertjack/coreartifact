@@ -234,11 +234,18 @@ Two encodings, by column shape:
   in the envelope (non-git cwd, or a repo with no commits). `NULL` is
   distinct from a real 40-char sha and from an empty string; a repo with no
   HEAD reads ABSENT, never `''`.
-- `kind` — `NULL` unless the recording pass finds a fixture-verified
-  discriminating signal (R9). The smoke test found none, so `kind` is
-  expected to be `NULL` for every session this campaign. Ingest **never**
-  sets `kind` heuristically; the `CHECK` allows the two values but the
-  common state is `NULL`/ABSENT.
+- `kind` — the recording pass **found** a fixture-verified discriminating
+  signal (2026-07-14, cc 2.1.209 — `docs/recording-pass.md` finding 3):
+  **`SessionStart` carries a `model` key iff the session is interactive.**
+  Ingest reads exactly that field — `model` present → `'interactive'`,
+  `model` absent → `'headless'` — and **never** infers heuristically (not
+  from `source`, which is `"startup"` in both modes; not from `effort`,
+  which a control run proved a false signal tracking the model, not the
+  mode). `NULL`/ABSENT is retained as the **drift fallback**: if a session
+  has no SessionStart line at all, or a future release drops the `model`
+  key, `kind` reads ABSENT — never a guess. Against the committed fixtures:
+  the interactive stream yields `'interactive'`; headless, worktree, SIGTERM
+  and SIGKILL yield `'headless'`.
 - `ended_at` — `NULL` when no SessionEnd was captured. This is the direct
   signal for `closed-clean` vs not (see Status).
 - `worktree_path` — `NULL` means the session ran in the *main checkout*
@@ -303,7 +310,7 @@ Two consequences the storage must honor:
 |---|---|---|
 | sha before / after | envelope `git.head` on SessionStart / SessionEnd | promoted → `sessions.sha_before` / `sha_after` |
 | footprint (distinct paths) | file-editing tool events | **materialized** → `footprint` table |
-| session kind | fixture-verified signal (none yet) | `sessions.kind` (NULL this campaign) |
+| session kind | `model` key present on SessionStart (fixture-verified) | `sessions.kind` — `interactive` / `headless`; NULL only as drift fallback |
 | status | derived from SessionEnd + staleness | `sessions.status` |
 | command string / duration | Bash `PostToolUse` payload | derived at render from `payload` |
 | command outcome | `hook_event_name` + payload signature | derived at render (three-state, above) |

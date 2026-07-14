@@ -87,8 +87,10 @@ none holds against today's tree (no CLI exists).
   unknown session id exits nonzero with an error naming the id.
 - **R12 Degradation rendering.** In `log` and `show`, an absent facet
   renders as an explicit absent marker, distinguishable from
-  empty/zero/success — asserted for sha-absent, kind-absent, and
-  outcome-absent.
+  empty/zero/success — asserted for sha-absent and outcome-absent.
+  (Session kind is no longer an absent case: the recording pass found the
+  `model`-key signal, so kind is populated `interactive`/`headless`; its
+  ABSENT path is the drift fallback only — 2026-07-14 amendment.)
 - **R13 Packaging.** The packed tarball installs into a tmpdir and exposes
   bins `coreartifact` and `cart`; `cart log` output is identical to
   `coreartifact log`. (The npx path is checked via pack + install, not the
