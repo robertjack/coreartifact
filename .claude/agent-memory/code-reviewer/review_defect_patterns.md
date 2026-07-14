@@ -56,6 +56,52 @@ executing the built code (`dist/`) against adversarial inputs yourself. Specific
    but it is the literal wording of the criterion.
 6. **U+2028/U+2029 is a red herring here** — `JSON.stringify` leaves them raw in the line, but the
    spool splits strictly on `\n`, so they are harmless. Verified; do not inflate it into a finding.
+7. **Mutation-test any "this is a real concurrency test" claim by patching `dist/`, not `src/`.**
+   Copy `dist/` twice into the scratchpad, hand-edit the mutant's built `.js` to reintroduce the bug
+   (e.g. swap the `O_APPEND` for `readFileSync`+`writeFileSync`), then run the test's *own* spawn
+   strategy against both. On ISS-0010 (2026-07-14) this proved the test genuine: the RMW mutant lost
+   2-9 of 12 entries and 93 of 100; the real one lost zero. A test that cannot fail on the mutant is
+   not a test — and this is the only way to know which you have.
+8. **`node:sqlite` `DatabaseSync` sets no `busy_timeout`, so it is 0.** Any two processes that open
+   the same ledger concurrently make one of them throw `Error: database is locked` out of
+   `db.exec(DDL)`. Found on ISS-0010 (8/20 concurrent `openLedger` calls on one path died). Check
+   every new SQLite open path for a `PRAGMA busy_timeout` — its absence is silent until two commands
+   (ingest + dashboard read) coexist.
+9. **Acceptance tests that override `HOME` instead of `COREARTIFACT_REGISTRY_ROOT` pollute the real
+   registry.** `paths.ts` gives the env override precedence over `HOME`, so any suite that only sets
+   `HOME` writes into the operator's real registry root whenever that var happens to be exported —
+   and then fails. Grep new tests for `process.env.HOME =` and check they use `REGISTRY_ROOT_ENV_VAR`.
+
+7. **Fallback laundering — the fallback value is never checked against the invariant the
+   fallback exists to protect.** ISS-0011 (attribution, executed 2026-07-14): when the main
+   root is underivable, the code returns the supplied `initRoot` (satisfying "never fabricate a
+   path"). But `initRoot` defaults to `process.cwd()` (`getPaths`), so in a bare-repo +
+   worktree workflow `initRoot` **IS the worktree** — the exact value the criterion said to
+   never return. A7 was satisfied *by* violating A6. **Whenever a function falls back to a
+   caller-supplied value, re-check that value against every "never return X" clause** — the
+   fallback is an untyped hole through which forbidden values re-enter. The unit test could
+   not catch it because it hardcoded an `initRoot` (tmp parent) that never equals the worktree.
+8. **Env scrubbing: check for `new Set([...])` + `if (!SET.has(key))`.** That is a *denylist*
+   even when it is long and even when its comment brags about not being a denylist. The spec
+   asks for an allowlist (clean env built from scratch). Note: I could NOT exploit a var
+   outside the list on git 2.55 (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` with `core.worktree` /
+   `core.bare` does not redirect `rev-parse`), so this rides S2 latent, not S1.
+
+## Real git facts established by execution (git 2.55, 2026-07-14) — do not re-derive
+
+- `git worktree list --porcelain` from a linked worktree reports as its FIRST entry:
+  - worktree-of-**submodule** → the submodule's **gitdir** (`<super>/.git/modules/<n>`), not its
+    checkout. Feeding that back verbatim is the "repo_root inside `.git`" unrecoverable bug.
+  - worktree-of-**bare** → the bare dir, plus a literal `bare` marker line.
+  - worktree-of-**`--separate-git-dir`** → the **external gitdir**, not the main checkout.
+- `git -C <gitdir> rev-parse --is-inside-work-tree --show-toplevel` self-corrects a gitdir back
+  to its work tree **only** for a submodule, because the module config carries
+  `core.worktree = ../../../<n>`. There is **no `gitdir` file** in `<super>/.git/modules/<n>` —
+  code comments crediting one are wrong. Bare and `--separate-git-dir` gitdirs have no
+  `core.worktree`, so the identical call fails `fatal: this operation must be run in a work tree`.
+  Therefore **no git command yields a main checkout for a worktree of a bare or
+  `--separate-git-dir` repo** — an implementer claiming that is telling the truth; verify the
+  *consequence* of their fallback instead.
 
 Prior ladder history: ISS-0001 burned two attempt ladders; escalated branches
 `escalated/ISS-0001-attempt-1` / `-attempt-2` hold prior implementations.

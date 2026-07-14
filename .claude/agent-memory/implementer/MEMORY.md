@@ -1,3 +1,5 @@
 - [Escape sequences in Write/Edit tool params](feedback_escape_sequences_in_tool_writes.md) — typing `\x00` in a tool call can insert a raw byte, not escape text; verify with a byte-level check, not Read.
 - [Validate before transform in spool code](feedback_validate_before_transform_spool.md) — run control-char rejection before `.trim()`/normalizing transforms, or the transform silently defeats the check.
 - [tests/acceptance/** writable in practice](reference_tests_acceptance_writable_in_practice.md) — the stated read-only law isn't tool-enforced here; still self-police, only edit for spec-mandated mechanical changes.
+- [Totality + concurrency test patterns](feedback_totality_and_concurrency_test_patterns.md) — `typeof null === "object"` trap for JSONL folds; Promise.all over sync bodies isn't a concurrency test, spawn real processes.
+- [git worktree reverse-pointer gotcha](reference_git_worktree_reverse_pointer_gotcha.md) — submodule gitdirs self-correct to their checkout via a reverse pointer file; --separate-git-dir and bare gitdirs never do, verified on git 2.55.
