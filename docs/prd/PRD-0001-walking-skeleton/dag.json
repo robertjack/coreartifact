@@ -137,8 +137,7 @@
         "R4 Capture. Replaying each recorded fixture stream through the installed hook command verbatim: one spool line per event; every line parses as envelope v1 with the payload byte-preserved; boundary lines carry head sha + dirty flag; N parallel interleaved replays lose zero lines (spool line count = sum of inputs).",
         "The hook artifact exits 0 for every input, including a payload that is not valid JSON, an empty stdin, and a spool directory that does not exist; a capture failure never breaks the host session and never writes a partial line to the spool.",
         "The hook artifact runs from a checkout with no node_modules present: invoking the built artifact by absolute path from a tmpdir git repo that has no node_modules directory appends the envelope line and exits 0.",
-        "A boundary payload delivered with a cwd whose git resolution fails records the git head and dirty keys as absent in the envelope rather than as an empty string, zero or false.",
-        "Replaying a WorktreeCreate fixture through the artifact, staged standalone (settings file present in the main checkout, a real worktree added by the harness helper, no init involved): the settings file appears in the new worktree's checkout AND the event lands in the spool."
+        "A boundary payload delivered with a cwd whose git resolution fails records the git head and dirty keys as absent in the envelope rather than as an empty string, zero or false."
       ]
     },
     {
@@ -171,9 +170,9 @@
       },
       "spec": "docs/issues/ISS-0005.md",
       "acceptance": [
-        "R1 Install. After init in a fresh tmpdir git repo: exit 0; stdout inventories exactly what was installed (hook config, hook artifact, spool + ledger location, gitignore line, registry entry); the repo tree diff shows ONLY those additions. The hook config subscribes SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd, WorktreeCreate, WorktreeRemove.",
+        "R1 Install. After init in a fresh tmpdir git repo: exit 0; stdout inventories exactly what was installed (hook config, hook artifact, spool + ledger location, gitignore line, registry entry); the repo tree diff shows ONLY those additions. The hook config subscribes exactly nine events - SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd - and does NOT subscribe WorktreeCreate or WorktreeRemove.",
         "R2 Init idempotence + merge. Re-running init: exit 0, no duplicate hook entries, no duplicate registry entry. A pre-existing settings file with unrelated user keys keeps those keys intact.",
-        "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree. Replaying a WorktreeCreate fixture through the installed hook: the settings file appears in the new worktree's checkout AND the event lands in the spool."
+        "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree, and a session run in that worktree with the propagated settings is captured into the main checkout's spool."
       ]
     },
     {

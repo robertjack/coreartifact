@@ -33,18 +33,19 @@ none holds against today's tree (no CLI exists).
 - **R1 Install.** After `init` in a fresh tmpdir git repo: exit 0; stdout
   inventories exactly what was installed (hook config, hook artifact,
   spool + ledger location, gitignore line, registry entry); the repo tree
-  diff shows ONLY those additions. The hook config subscribes
-  SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
-  PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd,
-  WorktreeCreate, WorktreeRemove (PreToolUse is deliberate: it leaves the
-  in-flight command visible when a session dies mid-command).
+  diff shows ONLY those additions. The hook config subscribes exactly
+  nine events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
+  PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd
+  (PreToolUse is deliberate: it leaves the in-flight command visible when
+  a session dies mid-command). WorktreeCreate and WorktreeRemove are
+  deliberately NOT subscribed — see the 2026-07-14 amendment.
 - **R2 Init idempotence + merge.** Re-running `init`: exit 0, no duplicate
   hook entries, no duplicate registry entry. A pre-existing settings file
   with unrelated user keys keeps those keys intact.
 - **R3 Propagation.** `init` in a repo that already has a worktree: the
-  settings file appears in that worktree. Replaying a WorktreeCreate
-  fixture through the installed hook: the settings file appears in the new
-  worktree's checkout AND the event lands in the spool.
+  settings file appears in that worktree. (The former second clause —
+  WorktreeCreate-hook propagation — was removed by the 2026-07-14
+  amendment: the platform made it impossible without breaking the host.)
 - **R4 Capture.** Replaying each recorded fixture stream through the
   installed hook command verbatim: one spool line per event; every line
   parses as envelope v1 with the payload byte-preserved; boundary lines
@@ -128,8 +129,8 @@ timestamps.
 Hook artifact: self-contained and zero-dependency (must work in a repo
 with no node_modules), referenced by absolute path from the hook config;
 always exits 0 — a capture failure must never break the host session. Its
-only behaviors: the append, boundary git enrichment, WorktreeCreate
-propagation.
+only behaviors: the append and boundary git enrichment (2026-07-14
+amendment: WorktreeCreate propagation removed).
 
 Invariants (reviewer prose, not criteria — a faithful test would be green
 today or asserts a preserved default): payloads stored verbatim;
@@ -177,6 +178,9 @@ ingest.
   for this campaign.
 - No `init --global`, no user-level hooks (v1.1 re-entry).
 - No spool rotation or compaction — append forever, this campaign.
+- No WorktreeCreate/WorktreeRemove subscription (2026-07-14 amendment):
+  they are delegation hooks — subscribing would hijack worktree creation
+  and break agent spawns. Capture never competes with the host.
 
 ## Out of scope (spec-level walls)
 
@@ -186,10 +190,18 @@ Windows-native support (WSL best-effort).
 
 ## Open risks
 
-1. **WorktreeCreate payload shape unverified** — does it carry the new
-   worktree's path? The recording pass answers. If absent, propagation
-   degrades to init-time copy + ingest warning only, and R3's second
-   clause re-opens by escalation, not silently.
+1. **WorktreeCreate payload shape — RESOLVED 2026-07-14 (recording
+   pass), in the worse direction.** The payload carries no worktree path
+   (only a `name`), and WorktreeCreate is a **delegation hook**: a
+   configured hook must create the worktree and print its path, so a
+   passive capture subscription breaks every worktree-isolated agent
+   spawn. The escalation path fired as designed: propagation is init-time
+   copy + ingest warning; WorktreeCreate/WorktreeRemove are not
+   subscribed. Residual, observed and accepted: worktree-isolated
+   subagents are captured anyway via the parent session's hooks; only new
+   top-level sessions in post-init worktrees stay uncaptured until the
+   warning names them. Revisit if the platform adds a notification-style
+   worktree event.
 2. **Headless discrimination may not exist** on current Claude Code — R9
    then lands as permanently-absent kind; revisit when the platform grows
    a signal.
@@ -224,3 +236,18 @@ scope → thin envelope + boundary shas only · headless tagging → recording
 pass settles it, nullable kind, honest-absent fallback · test topology →
 single subprocess-CLI seam with fixture replay, no mocks · budget → $150 ·
 compile sketch confirmed as above.
+
+## Amendment (2026-07-14, recording pass — see docs/recording-pass.md)
+
+Observed on Claude Code 2.1.209: **WorktreeCreate is a delegation hook**
+— when configured, Claude Code hands worktree creation to the hook, which
+must print the new path; a passive append-only hook fails the spawn
+("hook succeeded but returned no worktree path"), killing every
+`isolation: worktree` agent in the repo. The payload also carries no
+worktree path (a `name` only), and WorktreeRemove never fired. Therefore:
+R1 subscribes nine events (WorktreeCreate/WorktreeRemove dropped), R3
+loses its WorktreeCreate clause, and propagation is two layers — init-time
+copy to existing worktrees + the ingest gap warning. Mitigation observed:
+worktree-isolated subagents are captured through the parent session's
+hooks regardless. The hook artifact has exactly two behaviors: the append
+and boundary git enrichment.

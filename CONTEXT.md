@@ -31,8 +31,13 @@ and no synonyms. Created 2026-07-14 during the PRD-0001 grill.
 - **attribution** — resolving a session to its ledger: git common dir →
   main repo root (worktree path recorded); non-git → init root.
 - **propagation** — copying the per-repo hook settings file into worktree
-  checkouts (at init for existing worktrees; via the WorktreeCreate hook
-  for new ones), so worktree sessions are captured at all.
+  checkouts at init time, so worktree sessions are captured at all; the
+  ingest warning names any worktree still missing the file. (The
+  WorktreeCreate-hook layer was removed 2026-07-14: WorktreeCreate is a
+  delegation hook — a configured hook must create the worktree and return
+  its path — so a passive capture subscription breaks agent worktree
+  spawns. Worktree-isolated subagents are captured via the parent
+  session's hooks regardless.)
 - **recording pass** — re-recording real Claude Code payloads as
   version-stamped committed fixtures; the empirical answer to payload
   questions and the input to all acceptance tests.

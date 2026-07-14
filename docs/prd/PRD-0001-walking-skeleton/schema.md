@@ -428,8 +428,9 @@ git sibling of `event`:
 
 The hook artifact is self-contained and zero-dependency (must run in a repo
 with no `node_modules`), referenced by absolute path from the hook config.
-Its only behaviors: the append, boundary git enrichment, and WorktreeCreate
-propagation.
+Its only behaviors: the append and boundary git enrichment (2026-07-14
+amendment — WorktreeCreate propagation removed; it is a delegation hook and
+subscribing it breaks agent worktree spawns, see docs/recording-pass.md).
 
 ---
 
