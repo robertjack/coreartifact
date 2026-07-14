@@ -7,3 +7,6 @@ dist/
 .aeh-attempt.json
 *.tsbuildinfo
 .pnpm-store/
+
+# Scratch git fixtures agents sometimes leave behind in the main checkout.
+submodule-source/
