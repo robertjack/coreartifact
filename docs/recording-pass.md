@@ -135,6 +135,20 @@ timing N replayed invocations of the built artifact (wall clock / N) and
 record the number here. User-noticeable overhead re-opens the artifact's
 form by escalation.
 
+## FINDING 5: unknown hook event names are ignored, not an error
+
+Observed 2026-07-14 on 2.1.209: a `settings.local.json` subscribing a hook
+event name that does not exist (`TotallyFakeEventName`) does **not** fail
+the session, warn, or suppress the real hooks — the session ran normally
+and every genuine hook still fired.
+
+**This is the fact the version-compatibility stance rests on** (see
+spec-v1.md "Compatibility stance"): coreartifact can subscribe a superset
+of hook events and run against older Claude Code releases that have never
+heard of some of them. Subscription is therefore forward- and
+backward-safe; only *semantics* (finding 1) and *payload shape* (findings
+3–4) drift.
+
 ## Recording protocol (for re-recording on future Claude Code versions)
 
 One scratch git repo; `settings.local.json` subscribes every event with

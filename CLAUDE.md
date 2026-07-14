@@ -25,6 +25,13 @@ section and the decisions log.
 - The raw spool is ground truth forever; ingestion is always re-runnable
   from it. An unavailable facet records as ABSENT — never fabricated,
   never silently zero.
+- Capture never parses and never breaks the host. The hook artifact
+  appends the payload verbatim, exits 0, and knows nothing about schemas
+  or versions — that ignorance is what makes it survive Claude Code
+  releases (spec "Compatibility stance"). Never push parsing, version
+  branching or schema knowledge into it. Never subscribe a hook event
+  whose semantics have not been observed: WorktreeCreate proved a
+  subscription can change the host's behavior, not merely watch it.
 - Repo is private until v1 launch, then the ENTIRE history publishes
   unredacted — write every commit message, ledger entry, and escalation
   as if already public.

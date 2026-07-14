@@ -208,6 +208,76 @@ metadata only — outcomes, costs, check results, paths, sha references —
 never file contents or transcripts. "Your code never leaves your machine"
 is a law, not a preference.
 
+## Compatibility stance (load-bearing, 2026-07-14)
+
+coreartifact's evidence spine rides a platform whose payloads are
+semi-documented and whose internals move. This stance is how that is
+survivable rather than a treadmill. It is derived from observation, not
+hope — see `docs/recording-pass.md`.
+
+**Three layers, three different failure modes.**
+
+1. **Capture is version-agnostic — and must stay that way.** The hook
+   artifact parses nothing: it appends the payload verbatim and exits.
+   New fields, renamed fields, new event types are all captured
+   losslessly, because nothing on the hot path understands what it is
+   writing. Unknown hook event names are ignored by Claude Code, not an
+   error (observed 2.1.209) — so coreartifact may subscribe a **superset**
+   of events and still run against older releases. Any proposal that puts
+   parsing, schema knowledge, or version branching into the hook artifact
+   is rejected on sight: it would trade this property away.
+2. **Derivation is where drift lands, and it degrades honestly.** Promoted
+   columns and facets are read from payloads at ingest/render. A renamed or
+   removed field makes a facet **ABSENT** (NULL) — never wrong, never
+   fabricated. Because the spool is ground truth and the ledger is a
+   disposable projection, **drift is recoverable, not lossy**: ship a fixed
+   parser, delete the ledger, re-ingest, and every historical session
+   retroactively regains its facets. Evidence captured is never evidence
+   lost; only temporarily evidence unread.
+3. **Semantic change is the dangerous class.** WorktreeCreate is the
+   cautionary tale: subscribing it does not observe worktree creation, it
+   *delegates* it — a passive capture hook breaks every worktree-isolated
+   agent in the repo. Verbatim storage protects against nothing here,
+   because the harm is to the **host**, not to the data. The discipline:
+   subscribe the minimum event set that the requirements need, and **never
+   subscribe an event whose semantics have not been personally observed**.
+   For any new event, the question the recording pass must answer is not
+   "what shape is the payload" but "does subscribing this change Claude
+   Code's behavior?"
+
+**The version-support contract (what we promise users).** Capture works on
+any version. Facets are verified against a named, tested range (currently
+**2.1.208–2.1.209**), published in the README. Outside that range, capture
+still records everything and facets may degrade to ABSENT — and `doctor`
+names which ones and why. We never silently guess a facet to preserve the
+appearance of support.
+
+**The maintenance loop (the fixtures ARE the regression suite).** On each
+Claude Code release: re-run the recording protocol
+(`docs/recording-pass.md`), replay the new streams through the acceptance
+tests — they go red exactly where payloads drifted — fix the parsers, bump
+the tested-range stamp, ship. The diff between the old fixture and the new
+one **is** the changelog. Budget ~30 minutes per release; `coreartifact
+record` (v1.1) is the investment that turns it into ~5 (and the difference
+between a chore done and a chore skipped).
+
+**The fragile-dependency register.** Most brittle first — every entry here
+is a facet whose source can vanish on any release, and each must fail to
+ABSENT, never to a guess:
+
+| dependency | facet it feeds | why fragile |
+|---|---|---|
+| transcript JSONL schema | cost/tokens (PRD-0002) | documented as internal + breakable; the standing tax the spec already accepted |
+| `model` on SessionStart | session `kind` | undocumented; our newest dependency (2026-07-14) |
+| `error` string embedding `Exit code N` | command outcome | string parsing, not a field |
+| `tool_response.backgroundTaskId` | outcome ABSENT | undocumented |
+| `agent_id` / `agent_type` | nesting keys | already renamed once (docs said `subagent_id`) |
+| `duration_ms` | command duration | undocumented |
+
+The trust spine — shas, footprint, commands, checks — rides only stable,
+documented surfaces. That was the original ruling and it is holding: every
+2026-07-13/14 surprise landed in the register above, never in the spine.
+
 ## OSS / paid line
 
 Single-player is OSS-complete and never crippled (capture, ledger, CLI,
@@ -222,10 +292,13 @@ No hosted or team feature until BOTH: ≥50 weekly-active installs (opt-in
 ping) AND ≥3 unprompted asks for sync/team.
 
 Graduating layers, each with its own gate: **v1.1** second adapter (Codex
-CLI — the schema-neutrality proof) and `init --global` (on many-repo
-pain) · **v2** prompt-surface evals + locked-acceptance workflow (need the
-corpus v1 accretes) and the session tree view (pure UI over captured
-keys) · **post-gate** the hosted trust layer.
+CLI — the schema-neutrality proof), `init --global` (on many-repo pain),
+and **`coreartifact record`** (the recording protocol as a command — the
+maintenance loop's highest-leverage investment; gate: the first release
+where re-recording by runbook is felt as a chore) · **v2** prompt-surface
+evals + locked-acceptance workflow (need the corpus v1 accretes) and the
+session tree view (pure UI over captured keys) · **post-gate** the hosted
+trust layer.
 
 ## Launch posture
 
@@ -267,7 +340,15 @@ eyeball remains operator-lane.
    the cheapest campaign.
 2. **PRD-0002 — evidence depth:** vitest parser (pluggable interface),
    fail-soft cost enrichment, the checks primitive, `doctor`, uninstall,
-   the telemetry ping + consent.
+   the telemetry ping + consent. **`doctor` widened (2026-07-14):** it is
+   not just the cost-parser reporter — it is the **drift reporter**. It
+   names the running Claude Code version, the tested range, and every facet
+   currently degrading to ABSENT *with its reason* (the register in the
+   Compatibility stance is its checklist). Ingest gains a cheap drift
+   detector to feed it: because payloads are stored verbatim, ingest can
+   notice "SessionStart no longer carries `model`" and record kind ABSENT
+   with a reason rather than a shrug. Silent drift is the enemy; the
+   product's own thesis applied to itself.
 3. **PRD-0003 — dashboard:** the read-only viewer, designed against a
    by-then-real ledger.
 
