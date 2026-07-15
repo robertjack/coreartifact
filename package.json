@@ -5,6 +5,9 @@
   "type": "module",
   "license": "Apache-2.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "bin": {
     "coreartifact": "dist/cli/bin.js",
     "cart": "dist/cli/bin.js"
@@ -13,7 +16,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm run build"
   },
   "engines": {
     "node": ">=22.13"
