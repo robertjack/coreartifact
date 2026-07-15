@@ -20,38 +20,18 @@
 // see src/core/paths.ts) — the node:sqlite import below is `@ts-ignore`d at
 // the import site and re-typed through a local interface.
 
-// @ts-ignore -- node:fs has no ambient types available in this sandbox
-import { existsSync as existsSyncFn } from "node:fs";
-import { getPaths } from "../../core/paths.js";
 import { readRegistry } from "../../core/registry.js";
-import { ingest } from "../../ingest/index.js";
 import { findWorktreeGaps } from "../../worktree-gap.js";
+import { walkRegisteredRepos, type RepoVisit } from "../../resolve-session.js";
 import {
   renderSessionLines,
   renderIngestReport,
   renderWorktreeGapWarnings,
   renderNoRegisteredRepos,
-  renderRepoUnavailable,
   type SessionLineInput,
 } from "../../render/log.js";
 
-// @ts-ignore -- node:sqlite has no ambient types available in this sandbox
-import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
-
-const existsSync = existsSyncFn as (path: string) => boolean;
-
-interface SqliteStatement {
-  all(...params: unknown[]): unknown[];
-  get(...params: unknown[]): unknown;
-}
-interface SqliteDatabase {
-  prepare(sql: string): SqliteStatement;
-  close(): void;
-}
-const DatabaseSync = DatabaseSyncCtor as unknown as new (
-  path: string,
-  options?: { readOnly?: boolean },
-) => SqliteDatabase;
+type SqliteDatabase = RepoVisit["db"];
 
 declare const process: {
   stdout: { write(chunk: string): boolean };
@@ -68,29 +48,6 @@ interface SessionSummaryRow {
 interface EventCandidateRow {
   payload: string;
   tool_use_id: string;
-}
-
-// Hand-rolled join: same rationale as src/core/paths.ts and
-// src/worktree-gap.ts — this file owns no shared path-join module.
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
-
-// Reachability MUST be checked before ever calling ingest() (S3 fix,
-// 2026-07-14 review finding): ingest -> openLedger does `mkdirSync(dataDir,
-// { recursive: true })` before it ever touches the spool, so naively
-// ingesting a registered-but-deleted repo brings `<repoRoot>/.coreartifact/`
-// (and even `repoRoot` itself, since mkdirSync recursive creates every
-// missing parent) back from the dead — then the report contradicts itself
-// ("ingested 0" alongside "unreachable"). A repo that was genuinely
-// `init`-ed always has `.coreartifact/` on disk (init creates it
-// synchronously, before any session ever runs) — so its absence, or the
-// repo root's own absence, is conclusive: skip and warn, never ingest.
-function isRepoReachable(repoRoot: string): boolean {
-  return existsSync(repoRoot) && existsSync(joinPath(repoRoot, ".coreartifact"));
 }
 
 // Command count comes from the events table, never re-derived from the
@@ -140,60 +97,41 @@ export async function logCommand(): Promise<number> {
 
   const sessionLines: SessionLineInput[] = [];
   const reportLines: string[] = [];
-  const warningLines: string[] = [];
+  const gapWarningLines: string[] = [];
 
-  for (const repoRoot of registeredRoots) {
-    // Step 2 (spec): ingest each registered ledger's spool, then read back
-    // its sessions — never skip a repo just because it isn't the one the
-    // command was run from (the union across repos this issue adds).
-    //
-    // The registry is append-only with no unregister in v1 (PRD-0002), so a
-    // registered root the user later moves or deletes is a normal, reachable
-    // state — degradation law applied to the loop itself: one unreachable
-    // repo must fold to a named skip, never abort the union before the
-    // reachable repos' sessions print (2026-07-14 review finding S1).
-    if (!isRepoReachable(repoRoot)) {
-      warningLines.push(renderRepoUnavailable(repoRoot, "repo root or .coreartifact/ not found on disk"));
-      continue;
+  // Step 2 (spec): ingest each registered ledger's spool, then read back its
+  // sessions — never skip a repo just because it isn't the one the command
+  // was run from (the union across repos this issue adds). The walk itself
+  // (src/resolve-session.ts, shared with `show` per ISS-0012) already
+  // applies the degradation law to the loop: an unreachable or errored repo
+  // folds to a named warning rather than aborting the union before the
+  // reachable repos' sessions print (2026-07-14 review finding S1).
+  const { warnings } = await walkRegisteredRepos(({ repoRoot, db, report }) => {
+    reportLines.push(renderIngestReport(report, repoRoot));
+
+    const gaps = findWorktreeGaps(repoRoot);
+    if (gaps.length > 0) {
+      gapWarningLines.push(renderWorktreeGapWarnings(gaps));
     }
 
-    try {
-      const report = await ingest(repoRoot);
-      reportLines.push(renderIngestReport(report, repoRoot));
+    const sessions = db
+      .prepare("SELECT session_id, status, kind, started_at FROM sessions ORDER BY started_at")
+      .all() as SessionSummaryRow[];
 
-      const gaps = findWorktreeGaps(repoRoot);
-      if (gaps.length > 0) {
-        warningLines.push(renderWorktreeGapWarnings(gaps));
-      }
-
-      const paths = getPaths(repoRoot);
-      const db = new DatabaseSync(paths.ledger, { readOnly: true });
-      try {
-        const sessions = db
-          .prepare("SELECT session_id, status, kind, started_at FROM sessions ORDER BY started_at")
-          .all() as SessionSummaryRow[];
-
-        for (const session of sessions) {
-          sessionLines.push({
-            sessionId: session.session_id,
-            repoRoot,
-            status: session.status,
-            kind: session.kind,
-            startedAt: session.started_at,
-            commandCount: countBashCommands(db, session.session_id),
-            footprintCount: countFootprint(db, session.session_id),
-          });
-        }
-      } finally {
-        db.close();
-      }
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      warningLines.push(renderRepoUnavailable(repoRoot, reason));
+    for (const session of sessions) {
+      sessionLines.push({
+        sessionId: session.session_id,
+        repoRoot,
+        status: session.status,
+        kind: session.kind,
+        startedAt: session.started_at,
+        commandCount: countBashCommands(db, session.session_id),
+        footprintCount: countFootprint(db, session.session_id),
+      });
     }
-  }
+  });
 
-  const output: string[] = [renderSessionLines(sessionLines), ...reportLines, ...warningLines];
+  const output: string[] = [renderSessionLines(sessionLines), ...reportLines, ...gapWarningLines, ...warnings];
   process.stdout.write(`${output.join("\n")}\n`);
   return 0;
 }

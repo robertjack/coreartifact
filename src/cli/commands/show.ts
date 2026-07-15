@@ -4,12 +4,20 @@
 // `show`)") — `show` never requires a separate `log` invocation first, it
 // just happens that the acceptance tests exercise it that way.
 //
-// This command stays thin: read the ledger's rows, derive the per-event
-// facets this issue owns (src/facets/outcome.ts), and hand everything to the
-// renderer (src/render/show.ts) that owns formatting. `show` never
-// re-derives a fact the ledger or ingest already computed, and it never
-// writes anything — reading the ledger the ingest module maintains is its
-// only side effect.
+// ISS-0012: `show` is now GLOBAL and prefix-tolerant, symmetrical with
+// `log` — the argument is resolved across every registered repo's ledger
+// (src/resolve-session.ts), not just cwd's, and matches an exact full
+// session id OR a unique prefix (the short id `log` prints). This fixes the
+// cross-slice mismatch the 2026-07-15 integration review found: `log` is
+// global/short-id, `show` was cwd-only/full-uuid-only, so the
+// log -> copy id -> show handoff never worked.
+//
+// This command stays thin: resolve the session via the shared module, read
+// the resolved repo's ledger rows, derive the per-event facets this issue
+// owns (src/facets/outcome.ts), and hand everything to the renderer
+// (src/render/show.ts) that owns formatting. `show` never re-derives a fact
+// the ledger or ingest already computed, and it never writes anything —
+// reading the ledger the ingest module maintains is its only side effect.
 //
 // @types/node is unreachable in this sandbox (no network, nothing cached —
 // see src/core/paths.ts) — the node:sqlite import below is `@ts-ignore`d at
@@ -17,9 +25,9 @@
 // src/cli/commands/log.ts.
 
 import { getPaths } from "../../core/paths.js";
-import { ingest } from "../../ingest/index.js";
+import { resolveSession } from "../../resolve-session.js";
 import { deriveCommandFacet, isBashToolPayload } from "../../facets/outcome.js";
-import { renderShow, renderUnknownSession, type TimelineEntry } from "../../render/show.js";
+import { renderShow, renderUnknownSession, renderAmbiguousMatch, type TimelineEntry } from "../../render/show.js";
 
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
 import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
@@ -131,19 +139,35 @@ function buildTimelineEntry(row: EventRow): TimelineEntry | null {
 }
 
 export async function showCommand(args: string[]): Promise<number> {
-  const sessionId = args[0];
-  if (!sessionId) {
-    process.stderr.write("coreartifact show: usage: coreartifact show <session>\n");
+  // Resolution walks the FULL registry union (like `log`), lazily ingesting
+  // each reachable repo along the way — this is the seam the 2026-07-15
+  // integration review found missing: show has no cwd/repo-root requirement
+  // of its own any more.
+  const sessionArg = args[0] ?? "";
+  const resolved = await resolveSession(sessionArg);
+
+  // Registry-walk warnings (unreachable/corrupt repos) are rendered
+  // regardless of outcome — the same degradation contract `log` has, never
+  // swallowed just because resolution itself succeeded.
+  for (const warning of resolved.warnings) {
+    process.stderr.write(`${warning}\n`);
+  }
+
+  if (resolved.kind === "usage-error") {
+    process.stderr.write(`${resolved.message}\n`);
+    return 1;
+  }
+  if (resolved.kind === "not-found") {
+    process.stderr.write(`${renderUnknownSession(resolved.sessionArg)}\n`);
+    return 1;
+  }
+  if (resolved.kind === "ambiguous") {
+    process.stderr.write(`${renderAmbiguousMatch(resolved.sessionArg, resolved.candidates)}\n`);
     return 1;
   }
 
-  const repoRoot = process.cwd();
+  const { repoRoot, sessionId } = resolved;
   const paths = getPaths(repoRoot);
-
-  // Lazy ingest, same contract as `log` (spec: "show writes nothing but the
-  // ledger the ingest module maintains" — triggering ingest is reading the
-  // spool forward, not a write of show's own).
-  await ingest(repoRoot);
 
   const db = new DatabaseSync(paths.ledger, { readOnly: true });
   try {
@@ -152,6 +176,10 @@ export async function showCommand(args: string[]): Promise<number> {
       .get(sessionId) as SessionRow | undefined;
 
     if (!sessionRow) {
+      // Cannot happen on the path resolveSession's "found" result takes
+      // (the row it just read session_id off of), but the degradation law
+      // still applies rather than assuming: never crash on a row that
+      // vanished between resolution and this read.
       process.stderr.write(`${renderUnknownSession(sessionId)}\n`);
       return 1;
     }

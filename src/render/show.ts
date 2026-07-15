@@ -107,3 +107,18 @@ export function renderShow(header: ShowHeaderInput, entries: TimelineEntry[]): s
 export function renderUnknownSession(sessionId: string): string {
   return `coreartifact show: unknown session '${sessionId}'`;
 }
+
+// ISS-0012: an ambiguous prefix (or a full id present in more than one
+// repo's ledger) fails honestly rather than silently picking one — every
+// candidate is listed with its full session id AND its repo root, since
+// that pair is what disambiguates a shared id across two repos.
+export function renderAmbiguousMatch(
+  sessionArg: string,
+  candidates: { sessionId: string; repoRoot: string }[],
+): string {
+  const lines = [
+    `coreartifact show: ambiguous session '${sessionArg}' matches ${candidates.length} sessions:`,
+    ...candidates.map((c) => `  ${c.sessionId}  ${c.repoRoot}`),
+  ];
+  return lines.join("\n");
+}
