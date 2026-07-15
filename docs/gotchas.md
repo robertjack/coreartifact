@@ -1,0 +1,78 @@
+# Gotchas — bugs this campaign has already bled on
+
+Every implementer starts fresh and rediscovers the same landmines. This file is
+the shared memory. **Read it before writing any slice.** Each entry cost a real
+review round (~$10) at least once; several cost two or three. The fixes are on
+main — reuse them, do not re-derive them.
+
+The standing rule that catches all of these: **"could this test fail if the bug
+were present?"** If no, it is not a test. Prove it by mutation — revert the fix,
+watch the test go red, restore.
+
+## 1. Entry-point guards make an always-executed program a silent no-op (×3)
+
+`fileURLToPath(import.meta.url) === process.argv[1]` fails on any symlinked
+install path (Node realpaths the loader's module but not `argv[1]`), and
+`import.meta.main` is **`undefined` on the `engines.node` floor (22.13)** — so
+either one makes the program exit 0 having done nothing. It hit the CLI bin, then
+the capture hook, twice more.
+
+- **Never** guard a program that is only ever executed and never imported —
+  `src/cli/bin.ts` has no guard; it just calls `main()`.
+- If a single file must be both entry AND importable (the hook), the only correct
+  guard is **realpath BOTH sides**: `realpathSync(argv[1]) === realpathSync(fileURLToPath(import.meta.url))`, defaulting to RUN on any error. Works on Node ≥12. See `src/hook/capture.ts`.
+- **Never `import.meta.main`** — it is version-gated below our floor.
+- Test it **through a symlink**, and verify on the **minimum supported Node**, by
+  executing the real artifact — not on your local Node only.
+
+## 2. Trailing-newline / control-char ordering drops real data (×2)
+
+Running a control-char check (`/[\x00-\x1f]/`, which includes `\n`) against RAW
+input **before trimming** rejects every ordinary newline-terminated payload.
+`serializeEnvelope` (ISS-0001) needs the check BEFORE trim because its `eventText`
+must be single-line; the hook (ISS-0004) needs it AFTER trim because stdin framing
+is a legitimate trailing newline. **The rule depends on whether a trailing newline
+is framing (strip) or corruption (reject) — decide per context, and test a
+trailing-`\n` payload either way.** A silently-dropped payload is capture loss.
+
+## 3. Denylist env scrubbing leaks the operator's machine (×2)
+
+`{ ...process.env }` minus a couple of `GIT_*` names still leaks
+`GIT_CONFIG_GLOBAL`, `GIT_COMMON_DIR`, `XDG_CONFIG_HOME`, etc. — poisoning a
+"hermetic" test or redirecting a session's spool into another repo. **Build the
+child env from scratch (ALLOWLIST): `PATH`, `HOME`, `XDG_CONFIG_HOME`, plus the
+explicit `GIT_AUTHOR_*`/`GIT_COMMITTER_*` you set.** The pattern lives in
+`src/core/attribution.ts` (`scrubbedEnv` / `ALLOWED_ENV_VARS`) — import it, do not
+reinvent it. A denylist is one `git`/tool release from being wrong again.
+
+## 4. A test that spawns the wrong artifact, or races itself, can't fail (×3)
+
+- Tests spawned `dist/cli.js` (a wrapper) while `bin` pointed at a different file
+  — the shipped artifact was never exercised.
+- A concurrency test used `Promise.all` over a **synchronous** body → it ran
+  serially → it could not detect the lost update it existed to catch. Spawn N
+  **separate processes** for real concurrency.
+- A "no-loss" test whose own stub writes concurrently without `O_APPEND` can lose
+  lines itself and mask the bug. The stub must be durable.
+- Build memoized in a module-level variable races under vitest's `forks` pool
+  (one process per test file). Build once in `globalSetup`, before workers fork.
+
+**Test the artifact that ships, exercise the real concurrency, and assert the
+property end-to-end — not a proxy for it** (assert the spool survives
+`git worktree remove`, don't assert "the path looks safe").
+
+## 5. Degradation law: absent is never fabricated
+
+`NULL`/absent means "source unavailable" and must stay distinguishable from
+empty/zero/success. Do not default a missing `at` to `""`, a missing sha to a
+plausible value, an unparseable timestamp to `open`, or an unknown `op` to `add`.
+When unsure, fail toward "we don't know" (`closed-inferred`, ABSENT), never toward
+a flattering claim. This is the product's one inviolable promise.
+
+## 6. Verify on the floor, not your laptop; execute, don't assert
+
+Platform facts (a Node API's availability, git's output shape, a hook payload's
+fields) are **verified by execution on the actual target**, never asserted from
+memory — memory has been wrong in both directions. `mise install node@<floor>`
+and run the real thing. This is CLAUDE.md law and it is why the campaign's worst
+bugs were caught before shipping.
