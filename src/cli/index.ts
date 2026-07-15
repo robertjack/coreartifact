@@ -31,6 +31,8 @@ declare const process: {
   stderr: { write(chunk: string): boolean };
 };
 
+import { initCommand } from "./commands/init.js";
+
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
 interface CommandSpec {
@@ -49,7 +51,7 @@ function notImplemented(name: string): CommandHandler {
 // Exported: a public surface later issues amend (registering `init`, `log`
 // and `show`'s real handlers) and later tests import directly.
 export const COMMANDS: CommandSpec[] = [
-  { name: "init", summary: "Register this repo and start capturing sessions", handler: notImplemented("init") },
+  { name: "init", summary: "Register this repo and start capturing sessions", handler: () => initCommand() },
   { name: "log", summary: "List sessions across registered ledgers", handler: notImplemented("log") },
   { name: "show", summary: "Show a single session in detail", handler: notImplemented("show") },
 ];
