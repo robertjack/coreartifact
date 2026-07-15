@@ -32,7 +32,15 @@ function runOneInvocation(command: string[], payload: string): Promise<ReplayInv
 // Sequential, in order, one invocation per fixture line — a single scenario
 // replayed against one hook command.
 export async function replayFixtures(scenario: ScenarioName, command: string[]): Promise<ReplayResult> {
-  const lines = loadFixtureStream(scenario);
+  return replayLines(loadFixtureStream(scenario), command);
+}
+
+// Sequential replay of EXPLICIT lines (e.g. a prefix of a recorded stream —
+// a truncated capture is exactly what the spool contains when a session is
+// SIGKILLed mid-command: the stream just stops). The lines still come from
+// a scenario via the loader; this primitive only controls where the stream
+// stops, it never fabricates or edits payloads.
+export async function replayLines(lines: string[], command: string[]): Promise<ReplayResult> {
   const invocations: ReplayInvocation[] = [];
   for (const line of lines) {
     invocations.push(await runOneInvocation(command, line));

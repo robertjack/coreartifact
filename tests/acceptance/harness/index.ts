@@ -7,6 +7,7 @@ export { runCli, type RunCliOptions, type RunCliResult } from "./cliRunner.js";
 export {
   replayFixtures,
   replayFixturesParallel,
+  replayLines,
   type ReplayInvocation,
   type ReplayResult,
   type ParallelReplayRequest,

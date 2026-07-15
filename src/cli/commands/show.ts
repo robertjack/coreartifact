@@ -26,7 +26,7 @@
 
 import { getPaths } from "../../core/paths.js";
 import { resolveSession } from "../../resolve-session.js";
-import { deriveCommandFacet, isBashToolPayload } from "../../facets/outcome.js";
+import { deriveCommandFacet, deriveInFlightCommandFacet, isBashToolPayload } from "../../facets/outcome.js";
 import { renderShow, renderUnknownSession, renderAmbiguousMatch, type TimelineEntry } from "../../render/show.js";
 
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
@@ -67,6 +67,7 @@ interface EventRow {
   hook_event_name: string;
   agent_id: string | null;
   agent_type: string | null;
+  tool_use_id: string | null;
   payload: string;
 }
 
@@ -85,14 +86,26 @@ function parsePayload(raw: string): Record<string, unknown> {
 }
 
 // PreToolUse on a Bash command carries the command string but no
-// outcome/duration of its own — the paired PostToolUse/PostToolUseFailure
-// event renders that command's one timeline line. Rendering PreToolUse too
-// would show every command twice.
-function isFoldedBashPreToolUse(hookEventName: string, payload: Record<string, unknown>): boolean {
-  return hookEventName === "PreToolUse" && isBashToolPayload(payload);
+// outcome/duration of its own. When its PAIRED PostToolUse/PostToolUseFailure
+// exists (matched by tool_use_id), the Post renders the command's one
+// timeline line and the Pre folds away — rendering both would show every
+// command twice. But an UNPAIRED Pre is the in-flight command of a session
+// that died mid-command (SIGKILL: the stream just stops) — the very case
+// PreToolUse is subscribed for — and MUST stay visible with outcome ABSENT.
+// Folding it unconditionally made the dying command vanish and put show's
+// timeline in disagreement with log's command count (integration-review S2,
+// 2026-07-15: log counts distinct Bash tool_use_ids across ALL events).
+function isFoldedBashPreToolUse(
+  hookEventName: string,
+  payload: Record<string, unknown>,
+  toolUseId: string | null,
+  pairedPostToolUseIds: Set<string>,
+): boolean {
+  if (hookEventName !== "PreToolUse" || !isBashToolPayload(payload)) return false;
+  return toolUseId !== null && pairedPostToolUseIds.has(toolUseId);
 }
 
-function buildTimelineEntry(row: EventRow): TimelineEntry | null {
+function buildTimelineEntry(row: EventRow, pairedPostToolUseIds: Set<string>): TimelineEntry | null {
   const payload = parsePayload(row.payload);
 
   if (row.hook_event_name === "UserPromptSubmit") {
@@ -131,8 +144,20 @@ function buildTimelineEntry(row: EventRow): TimelineEntry | null {
     };
   }
 
-  if (isFoldedBashPreToolUse(row.hook_event_name, payload)) {
-    return null;
+  if (row.hook_event_name === "PreToolUse" && isBashToolPayload(payload)) {
+    if (isFoldedBashPreToolUse(row.hook_event_name, payload, row.tool_use_id, pairedPostToolUseIds)) {
+      return null;
+    }
+    // Unpaired: the in-flight command of a session that died mid-command.
+    const facet = deriveInFlightCommandFacet(payload);
+    return {
+      kind: "command",
+      seq: row.seq,
+      ts: row.ts,
+      command: facet.command,
+      outcome: facet.outcome,
+      durationMs: facet.durationMs,
+    };
   }
 
   return { kind: "lifecycle", seq: row.seq, ts: row.ts, hookEventName: row.hook_event_name };
@@ -190,13 +215,26 @@ export async function showCommand(args: string[]): Promise<number> {
 
     const eventRows = db
       .prepare(
-        "SELECT seq, ts, hook_event_name, agent_id, agent_type, payload FROM events WHERE session_id = ? ORDER BY seq",
+        "SELECT seq, ts, hook_event_name, agent_id, agent_type, tool_use_id, payload FROM events WHERE session_id = ? ORDER BY seq",
       )
       .all(sessionId) as EventRow[];
 
+    // A Bash Pre folds only when its paired Post exists in this session;
+    // an unpaired Pre is the in-flight command and renders with outcome
+    // ABSENT (see isFoldedBashPreToolUse).
+    const pairedPostToolUseIds = new Set<string>();
+    for (const row of eventRows) {
+      if (
+        (row.hook_event_name === "PostToolUse" || row.hook_event_name === "PostToolUseFailure") &&
+        row.tool_use_id !== null
+      ) {
+        pairedPostToolUseIds.add(row.tool_use_id);
+      }
+    }
+
     const entries: TimelineEntry[] = [];
     for (const row of eventRows) {
-      const entry = buildTimelineEntry(row);
+      const entry = buildTimelineEntry(row, pairedPostToolUseIds);
       if (entry !== null) entries.push(entry);
     }
 

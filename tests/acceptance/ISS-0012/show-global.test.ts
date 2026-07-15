@@ -20,9 +20,10 @@ import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTmpRepo, runCli, replayFixtures, type TmpRepo } from "../harness/index.js";
+import { createTmpRepo, runCli, replayFixtures, replayLines, type TmpRepo } from "../harness/index.js";
 import { loadFixtureStream } from "../../fixtures/loader.js";
 import { getPaths } from "../../../src/core/paths.js";
+import { ABSENT_MARKER } from "../../../src/render/absent.js";
 
 function sessionIdOf(fixtureLine: string): string {
   const parsed = JSON.parse(fixtureLine) as { session_id?: unknown };
@@ -347,6 +348,98 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
         `${emptyResult.stdout}\n${emptyResult.stderr}`,
         "show with an empty session argument did not report a usage error",
       ).toMatch(/usage/i);
+    },
+    60000,
+  );
+
+  it(
+    "An in-flight command stays visible: a session killed mid-command (a truncated capture ending on an unpaired Bash PreToolUse) renders that command in show's timeline with outcome ABSENT, and show's command-line count equals the cmds count log prints - they never disagree.",
+    async () => {
+      // Integration-review S2 (2026-07-15): PreToolUse is subscribed precisely
+      // so a session dying mid-command leaves the in-flight command visible,
+      // but show folded EVERY Bash Pre away (assuming a paired Post always
+      // follows) — the dying command vanished, and log (which counts distinct
+      // Bash tool_use_ids across ALL events) disagreed with show's timeline.
+      //
+      // A SIGKILL's spool is a stream that just stops — so replaying a PREFIX
+      // of the real sigkill stream, truncated right after a Bash PreToolUse,
+      // is exactly the capture such a session leaves behind (a truncated
+      // capture, not an edited fixture; see replayLines).
+      const repo = await createTmpRepo();
+      tmpRepos.push(repo);
+      const initResult = await runCli(["init"], { cwd: repo.root, home: repo.home, registryPath: repo.registryPath });
+      expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
+
+      const paths = getPaths(repo.root);
+      const command = ["node", paths.hookArtifact, repo.root];
+      const sigkillLines = loadFixtureStream("SIGKILL");
+
+      // Truncate right after the LAST Bash PreToolUse, so its Post never
+      // arrives: one (or more) completed command plus one in-flight command.
+      let lastBashPreIndex = -1;
+      let inFlightCommand: string | null = null;
+      for (let i = 0; i < sigkillLines.length; i++) {
+        const parsed = JSON.parse(sigkillLines[i]!) as {
+          hook_event_name?: unknown;
+          tool_name?: unknown;
+          tool_input?: { command?: unknown };
+        };
+        if (parsed.hook_event_name === "PreToolUse" && parsed.tool_name === "Bash") {
+          lastBashPreIndex = i;
+          inFlightCommand = typeof parsed.tool_input?.command === "string" ? parsed.tool_input.command : null;
+        }
+      }
+      expect(
+        lastBashPreIndex,
+        "test setup invariant: the SIGKILL stream contains no Bash PreToolUse to truncate after",
+      ).toBeGreaterThan(-1);
+      expect(inFlightCommand, "test setup invariant: the truncation PreToolUse carries no command string").not.toBeNull();
+
+      const prefix = sigkillLines.slice(0, lastBashPreIndex + 1);
+      await replayLines(prefix, command);
+
+      const sessionId = sessionIdOf(sigkillLines[0]!);
+      const nowhere = mkdtempSync(join(tmpdir(), "iss0012-inflight-nowhere-"));
+      try {
+        const logResult = await runCli(["log"], { cwd: nowhere, home: repo.home, registryPath: repo.registryPath });
+        expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);
+        const shortId = extractShortId(logResult.stdout, sessionId);
+
+        // log's printed cmds count, parsed off the session's own line.
+        const sessionLine = logResult.stdout.split("\n").find((line) => line.startsWith(shortId));
+        expect(sessionLine, "log printed no line for the truncated session").toBeDefined();
+        const cmdsMatch = /cmds:(\d+)/.exec(sessionLine!);
+        expect(cmdsMatch, `log's session line carries no cmds:N field: ${sessionLine}`).not.toBeNull();
+        const logCount = Number(cmdsMatch![1]);
+
+        const showResult = await runCli(["show", shortId], {
+          cwd: nowhere,
+          home: repo.home,
+          registryPath: repo.registryPath,
+        });
+        expect(showResult.exitCode, `show did not exit 0; stderr: ${showResult.stderr}`).toBe(0);
+
+        const commandLines = showResult.stdout.split("\n").filter((line) => line.includes("command: "));
+        // The in-flight command is VISIBLE, with outcome ABSENT — never
+        // vanished, never fabricated as success.
+        const inFlightLine = commandLines.find((line) => line.includes(inFlightCommand!));
+        expect(
+          inFlightLine,
+          `the in-flight command "${inFlightCommand}" is missing from show's timeline:\n${showResult.stdout}`,
+        ).toBeDefined();
+        expect(
+          inFlightLine!,
+          "the in-flight command's outcome must be the ABSENT marker (never success/failure)",
+        ).toContain(`outcome: ${ABSENT_MARKER}`);
+
+        // And the two commands agree on what a command IS.
+        expect(
+          commandLines.length,
+          `show renders ${commandLines.length} command line(s) but log printed cmds:${logCount} - the commands disagree`,
+        ).toBe(logCount);
+      } finally {
+        rmSync(nowhere, { recursive: true, force: true });
+      }
     },
     60000,
   );

@@ -68,10 +68,20 @@ function isAutoBackgrounded(payload: Record<string, unknown>): boolean {
   return typeof backgroundTaskId === "string" && backgroundTaskId.length > 0;
 }
 
+// An IN-FLIGHT command: a Bash PreToolUse with no paired Post event in the
+// session — the session died (SIGKILL) while the command was running, and
+// PreToolUse is subscribed precisely so this command stays visible
+// (docs/issues/ISS-0005.md R1 rationale; integration-review S2, 2026-07-15:
+// show folded every Pre away unconditionally, so the dying command
+// vanished). Its outcome was never observed → ABSENT, never fabricated.
+export function deriveInFlightCommandFacet(payload: Record<string, unknown>): CommandFacet {
+  return { command: extractCommand(payload), durationMs: null, outcome: { state: "absent" } };
+}
+
 // Derives the three-state outcome, command string and duration for one Bash
-// PostToolUse/PostToolUseFailure event. Never called for a bare PreToolUse
-// (which carries no outcome/duration of its own) — the caller folds
-// PreToolUse away and renders the paired Post event instead.
+// PostToolUse/PostToolUseFailure event. Never called for a bare PreToolUse:
+// a PAIRED Pre is folded away (its Post renders the command's one line);
+// an UNPAIRED Pre renders via deriveInFlightCommandFacet above.
 export function deriveCommandFacet(input: CommandFacetInput): CommandFacet {
   const { hookEventName, payload } = input;
   const command = extractCommand(payload);
