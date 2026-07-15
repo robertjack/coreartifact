@@ -334,7 +334,8 @@
       "spec": "docs/issues/ISS-0007.md",
       "acceptance": [
         "R10 Log. One line per session containing at minimum: short id, repo, status, kind-or-absent, start time, command count, footprint count. With two registered repos, log unions both. Ingest emits a warning naming any worktree missing the settings file and stays silent when propagation is complete.",
-        "log in a repo with no sessions exits 0 and prints an explicit empty-state line rather than nothing, and log run outside any registered repo exits 0 and says so."
+        "log in a repo with no sessions exits 0 and prints an explicit empty-state line rather than nothing, and log run outside any registered repo exits 0 and says so.",
+        "log runs from ANY directory, git or not: from a non-git directory it exits 0 and prints the union (or the empty state), never exits nonzero. And it isolates per-repo failures: with two registered repos where one has been deleted or has a corrupt ledger, log still prints the healthy repo's sessions, warns naming the broken one, exits 0, and does NOT recreate the deleted repo's .coreartifact/ directory."
       ]
     },
     {
