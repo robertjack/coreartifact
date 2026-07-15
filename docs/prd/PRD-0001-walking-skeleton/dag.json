@@ -406,6 +406,40 @@
       "acceptance": [
         "The tarball ships ONLY runtime files (dist/ plus package.json and README/LICENSE if present) via an explicit files allowlist - it does NOT ship src/, tests/, docs/, .aeh/, .claude/, CLAUDE.md, spec-v1.md, CONTEXT.md, tsconfig.json, or the fixture corpus. Asserted by enumerating the packed tarball's entries: every path is under package/dist/ or is one of the allowlisted top-level metadata files, and none is under the excluded dev directories. AND, unchanged by the files field: the tarball still contains the built hook artifact and both bins, init from the installed package copies the artifact and exits 0, and cart log output equals coreartifact log."
       ]
+    },
+    {
+      "id": "ISS-0012",
+      "kind": "fix",
+      "risk": "med",
+      "complexity": "m",
+      "depends_on": [],
+      "db": false,
+      "ui": false,
+      "verify": [
+        "pnpm run typecheck",
+        "pnpm test",
+        "pnpm run build"
+      ],
+      "files": {
+        "owns": [
+          "src/cli/commands/show.ts",
+          "src/resolve-session.ts",
+          "tests/acceptance/ISS-0012/log-show-handoff.test.ts",
+          "tests/unit/resolve-session.test.ts"
+        ],
+        "touches": [
+          "src/cli/index.ts",
+          "src/cli/commands/log.ts",
+          "src/render/show.ts"
+        ]
+      },
+      "spec": "docs/issues/ISS-0012.md",
+      "acceptance": [
+        "The log-to-show handoff works as a user performs it: after sessions are captured in a registered repo, running log, parsing the SHORT id out of log's actual stdout (never read from the ledger), and running show with that short id - from a NON-GIT working directory - prints that session's timeline and exits 0.",
+        "show resolves its session argument across ALL registered repos via the registry union, with the same per-repo degradation log has: a session captured in repo A opens from any cwd, and an unreachable registered repo is warned-and-skipped, never sinking the lookup.",
+        "An AMBIGUOUS short id fails honestly: when a prefix matches more than one session row across the union (including the same session_id present in two repos' ledgers), show exits nonzero and lists every candidate with its full session id and repo, never silently picking one.",
+        "A full session id continues to work exactly as before, an unknown id (prefix or full) exits nonzero naming the id, and an empty or too-short prefix (below the length log prints) is rejected with a usage error rather than treated as a match-everything prefix."
+      ]
     }
   ]
 }
