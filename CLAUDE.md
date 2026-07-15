@@ -57,10 +57,10 @@ section and the decisions log.
   PRD-0001 walking skeleton shipped (2026-07-15; 12 issues, $149.04 of
   $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md).
 - Next: `/aeh-prd` for PRD-0002 (checks, doctor, uninstall, cost/token
-  enrichment — walls in spec). Before dispatch, land the retro's one
-  process change: an aeh write-guard lane for `.claude/agent-memory/<own
-  role>/**` so mid-issue gotchas stop dying at the guard (9 denied
-  attempts this campaign). Geography now lives in docs/map.md.
+  enrichment — walls in spec). The retro's process change is LANDED
+  (aeh 704d6b5, 2026-07-15): roles can now write `.claude/agent-memory/
+  <own role>/**` mid-issue. Still open before launch: reserve the npm
+  name (operator act). Geography lives in docs/map.md.
 
 ## Repo conventions
 
