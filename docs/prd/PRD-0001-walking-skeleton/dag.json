@@ -257,7 +257,7 @@
         "R1 Install. After init in a fresh tmpdir git repo: exit 0; stdout inventories exactly what was installed (hook config, hook artifact, spool + ledger location, gitignore line, registry entry); the repo tree diff shows ONLY those additions. The hook config subscribes exactly nine events - SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, SubagentStart, SubagentStop, Stop, SessionEnd - and does NOT subscribe WorktreeCreate or WorktreeRemove.",
         "R2 Init idempotence + merge. Re-running init: exit 0, no duplicate hook entries, no duplicate registry entry. A pre-existing settings file with unrelated user keys keeps those keys intact.",
         "After init, neither path init writes is committable: .coreartifact/ is gitignored, .claude/settings.local.json is gitignored (init adds the line if Claude Code has not), and if .coreartifact/ was already tracked by a prior commit init warns rather than silently leaving the verbatim-payload spool committable. git status --porcelain plus the ignored-file listing shows no coreartifact-written path in a committable state.",
-        "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree, and a session run in that worktree with the propagated settings is captured into the main checkout's spool."
+        "R3 Propagation. init in a repo that already has a worktree: the settings file appears in that worktree (MERGED into any pre-existing settings.local.json there, never clobbering the user's keys) and is gitignored in that worktree (not committable); a session run in that worktree with the propagated settings is captured into the main checkout's spool."
       ]
     },
     {
