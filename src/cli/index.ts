@@ -32,6 +32,7 @@ declare const process: {
 };
 
 import { initCommand } from "./commands/init.js";
+import { logCommand } from "./commands/log.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -52,7 +53,7 @@ function notImplemented(name: string): CommandHandler {
 // and `show`'s real handlers) and later tests import directly.
 export const COMMANDS: CommandSpec[] = [
   { name: "init", summary: "Register this repo and start capturing sessions", handler: () => initCommand() },
-  { name: "log", summary: "List sessions across registered ledgers", handler: notImplemented("log") },
+  { name: "log", summary: "List sessions across registered ledgers", handler: () => logCommand() },
   { name: "show", summary: "Show a single session in detail", handler: notImplemented("show") },
 ];
 
