@@ -308,10 +308,17 @@ trust layer.
 
 **Private while building; public at v1 launch** (operator ruling,
 overriding the build-in-public lean). To keep "built with receipts"
-verifiable rather than curated: the ENTIRE history publishes unredacted at
-launch — git log, aeh ledger, release packets, escalations included — and
-the launch write-up walks that history. Reserve the npm name before any
-public artifact exists.
+verifiable rather than curated: the ENTIRE git history publishes
+unredacted at launch — commit log, PRD artifacts (prd/plan/dag/schema/
+retro), escalation amendments, release packets — and the launch write-up
+walks that history. **Amended 2026-07-15 (operator ruling): the aeh
+ledger does NOT publish.** `.aeh/aeh.db`, `events.jsonl`, and transcripts
+stay local and untracked (as the gitignore already had them) — they are
+operational exhaust, not evidence: absolute machine paths and session
+internals with no verification value the tracked artifacts don't already
+carry. The write-as-if-public discipline for ledger entries stands
+regardless. The npm name was reserved 2026-07-15 (`coreartifact@0.0.0`
+placeholder, operator act complete).
 
 ## Non-goals (v1, confirmed)
 
