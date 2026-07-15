@@ -35,9 +35,9 @@ section and the decisions log.
 - Repo is private until v1 launch, then the ENTIRE history publishes
   unredacted — write every commit message, ledger entry, and escalation
   as if already public.
-- No npm publish until the `coreartifact` name is reserved (operator act,
-  deferred 2026-07-13); `private: true` in package.json is the guard —
-  do not remove it.
+- The npm name is reserved (`coreartifact@0.0.0` placeholder, published
+  2026-07-15). No publish of the real package until v1 launch;
+  `private: true` in package.json is the guard — do not remove it.
 
 ## Build motion
 
@@ -59,8 +59,8 @@ section and the decisions log.
 - Next: `/aeh-prd` for PRD-0002 (checks, doctor, uninstall, cost/token
   enrichment — walls in spec). The retro's process change is LANDED
   (aeh 704d6b5, 2026-07-15): roles can now write `.claude/agent-memory/
-  <own role>/**` mid-issue. Still open before launch: reserve the npm
-  name (operator act). Geography lives in docs/map.md.
+  <own role>/**` mid-issue. The npm name is reserved (2026-07-15).
+  Geography lives in docs/map.md.
 
 ## Repo conventions
 
