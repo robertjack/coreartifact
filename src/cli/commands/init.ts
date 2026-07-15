@@ -119,14 +119,22 @@ export async function initCommand(): Promise<number> {
   await addLedger(repoRoot);
   lines.push(`registry:       added ${repoRoot} to ${paths.registry}`);
 
-  // Propagation — copy the just-written settings file into every worktree
-  // checkout that already exists at install time (spec "Propagation to
-  // existing worktrees"). A worktree created after `init` stays uncaptured
-  // until ingest's warning names it, or until `init` is re-run.
+  // Propagation — merge the same hook config into every worktree checkout
+  // that already exists at install time (spec "Propagation to existing
+  // worktrees"). A worktree commonly carries its own gitignored
+  // settings.local.json (per-worktree permissions/user keys) — read-merge-
+  // write it exactly like the main checkout, never blind-overwrite it, or
+  // an agent's worktree-local keys are destroyed by `init`. A worktree
+  // created after `init` stays uncaptured until ingest's warning names it,
+  // or until `init` is re-run.
   for (const worktreePath of listOtherWorktreePaths(repoRoot)) {
+    const worktreeSettingsPath = joinPath(worktreePath, ".claude", "settings.local.json");
+    const existingWorktreeSettings = readExistingSettings(worktreeSettingsPath);
+    const mergedWorktreeSettings = mergeHookConfig(existingWorktreeSettings, paths.hookArtifact, repoRoot);
+    const worktreeSettingsText = `${JSON.stringify(mergedWorktreeSettings, null, 2)}\n`;
     mkdirSync(joinPath(worktreePath, ".claude"), { recursive: true });
-    writeFileSync(joinPath(worktreePath, ".claude", "settings.local.json"), settingsText);
-    lines.push(`propagated:     ${joinPath(worktreePath, ".claude", "settings.local.json")}`);
+    writeFileSync(worktreeSettingsPath, worktreeSettingsText);
+    lines.push(`propagated:     ${worktreeSettingsPath}`);
   }
 
   process.stdout.write(`${lines.join("\n")}\n`);
