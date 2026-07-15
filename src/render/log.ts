@@ -84,3 +84,11 @@ export function renderWorktreeGapWarnings(gaps: WorktreeGap[]): string {
 export function renderNoRegisteredRepos(): string {
   return 'coreartifact log: no repos registered — run "coreartifact init" in a repo first.';
 }
+
+// Degradation law, applied to the registry loop itself (not just facets
+// inside one repo): a registered root that has moved or vanished (v1 has no
+// unregister — PRD-0002) must never abort the union before the reachable
+// repos' sessions print. Named skip, not a crash.
+export function renderRepoUnavailable(repoRoot: string, reason: string): string {
+  return `warning: registered repo unreachable, skipping: ${repoRoot} (${reason})`;
+}

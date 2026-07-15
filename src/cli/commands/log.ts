@@ -19,6 +19,7 @@ import {
   renderIngestReport,
   renderWorktreeGapWarnings,
   renderNoRegisteredRepos,
+  renderRepoUnavailable,
   type SessionLineInput,
 } from "../../render/log.js";
 
@@ -111,34 +112,45 @@ export async function logCommand(): Promise<number> {
     // Step 2 (spec): ingest each registered ledger's spool, then read back
     // its sessions — never skip a repo just because it isn't the one the
     // command was run from (the union across repos this issue adds).
-    const report = await ingest(repoRoot);
-    reportLines.push(renderIngestReport(report, repoRoot));
-
-    const gaps = findWorktreeGaps(repoRoot);
-    if (gaps.length > 0) {
-      warningLines.push(renderWorktreeGapWarnings(gaps));
-    }
-
-    const paths = getPaths(repoRoot);
-    const db = new DatabaseSync(paths.ledger, { readOnly: true });
+    //
+    // The registry is append-only with no unregister in v1 (PRD-0002), so a
+    // registered root the user later moves or deletes is a normal, reachable
+    // state — degradation law applied to the loop itself: one unreachable
+    // repo must fold to a named skip, never abort the union before the
+    // reachable repos' sessions print (2026-07-14 review finding S1).
     try {
-      const sessions = db
-        .prepare("SELECT session_id, status, kind, started_at FROM sessions ORDER BY started_at")
-        .all() as SessionSummaryRow[];
+      const report = await ingest(repoRoot);
+      reportLines.push(renderIngestReport(report, repoRoot));
 
-      for (const session of sessions) {
-        sessionLines.push({
-          sessionId: session.session_id,
-          repoRoot,
-          status: session.status,
-          kind: session.kind,
-          startedAt: session.started_at,
-          commandCount: countBashCommands(db, session.session_id),
-          footprintCount: countFootprint(db, session.session_id),
-        });
+      const gaps = findWorktreeGaps(repoRoot);
+      if (gaps.length > 0) {
+        warningLines.push(renderWorktreeGapWarnings(gaps));
       }
-    } finally {
-      db.close();
+
+      const paths = getPaths(repoRoot);
+      const db = new DatabaseSync(paths.ledger, { readOnly: true });
+      try {
+        const sessions = db
+          .prepare("SELECT session_id, status, kind, started_at FROM sessions ORDER BY started_at")
+          .all() as SessionSummaryRow[];
+
+        for (const session of sessions) {
+          sessionLines.push({
+            sessionId: session.session_id,
+            repoRoot,
+            status: session.status,
+            kind: session.kind,
+            startedAt: session.started_at,
+            commandCount: countBashCommands(db, session.session_id),
+            footprintCount: countFootprint(db, session.session_id),
+          });
+        }
+      } finally {
+        db.close();
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      warningLines.push(renderRepoUnavailable(repoRoot, reason));
     }
   }
 

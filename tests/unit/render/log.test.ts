@@ -5,6 +5,7 @@ import {
   renderIngestReport,
   renderWorktreeGapWarnings,
   renderNoRegisteredRepos,
+  renderRepoUnavailable,
   type SessionLineInput,
 } from "../../../src/render/log.js";
 import { ABSENT_MARKER } from "../../../src/render/absent.js";
@@ -93,5 +94,14 @@ describe("renderWorktreeGapWarnings", () => {
 describe("renderNoRegisteredRepos", () => {
   it("mentions the registry", () => {
     expect(renderNoRegisteredRepos()).toMatch(/regist/i);
+  });
+});
+
+describe("renderRepoUnavailable", () => {
+  it("names the unreachable repo and folds the reason in as a warning, never a thrown error", () => {
+    const output = renderRepoUnavailable("/repos/gone", "ENOENT: no such file or directory");
+    expect(output).toMatch(/warn/i);
+    expect(output).toContain("/repos/gone");
+    expect(output).toContain("ENOENT");
   });
 });
