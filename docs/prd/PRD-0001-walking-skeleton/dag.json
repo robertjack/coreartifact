@@ -404,9 +404,7 @@
       },
       "spec": "docs/issues/ISS-0009.md",
       "acceptance": [
-        "R13 Packaging. The packed tarball installs into a tmpdir and exposes bins coreartifact and cart; cart log output is identical to coreartifact log. (The npx path is checked via pack + install, not the live registry.)",
-        "The packed tarball contains the built hook artifact, and init run from the installed package copies that artifact into the target repo and exits 0.",
-        "The tarball ships ONLY runtime files (dist/ plus package.json and README/LICENSE if present) via an explicit files allowlist - it does NOT ship src/, tests/, docs/, .aeh/, .claude/, CLAUDE.md, spec-v1.md, CONTEXT.md, tsconfig.json, or the fixture corpus. Asserted by enumerating the packed tarball's entries: every path is under package/dist/ or is one of the allowlisted top-level metadata files, and none is under the excluded dev directories."
+        "The tarball ships ONLY runtime files (dist/ plus package.json and README/LICENSE if present) via an explicit files allowlist - it does NOT ship src/, tests/, docs/, .aeh/, .claude/, CLAUDE.md, spec-v1.md, CONTEXT.md, tsconfig.json, or the fixture corpus. Asserted by enumerating the packed tarball's entries: every path is under package/dist/ or is one of the allowlisted top-level metadata files, and none is under the excluded dev directories. AND, unchanged by the files field: the tarball still contains the built hook artifact and both bins, init from the installed package copies the artifact and exits 0, and cart log output equals coreartifact log."
       ]
     }
   ]
