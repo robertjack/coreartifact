@@ -363,6 +363,24 @@ eyeball remains operator-lane.
 3. **PRD-0003 — dashboard:** the read-only viewer, designed against a
    by-then-real ledger.
 
+**Launch acts (added 2026-07-15)** — after PRD-0003, before the public
+flip; operator-lane hand-work like the retro, not a dispatched campaign:
+
+- README — the front door: the laws up top, quickstart (init → session →
+  `log`/`show`), Node floor, pre-1.0 no-support banner, plus the two
+  facts this spec already mandates it carry: the `cart` alias and the
+  tested Claude Code version range.
+- LICENSE + NOTICE — Apache-2.0 (confirmed above); correct the npm
+  placeholder's wrong MIT stamp at the next publish.
+- SECURITY.md — vulnerability contact + the privacy law restated.
+- Contribution posture — a short "personal-first, no contributions
+  before 1.0, issues welcome without SLA" note or issue-template config.
+- CI — the existing gates (typecheck/test/build) on GitHub Actions;
+  prerequisite for npm provenance at the v1 publish.
+- The launch write-up walking the public history (per Launch posture).
+- The flip itself: repo public, `private: true` removed, v1 published
+  over the placeholder.
+
 ## Open risks
 
 - **Transcript-parse maintenance tax:** the cost facet breaks on Claude
