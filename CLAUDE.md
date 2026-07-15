@@ -2,8 +2,8 @@
 
 Local-first evidence ledger for agent-built software (TS CLI + SQLite +
 local dashboard). This file is behavior only; orientation lives in
-`spec-v1.md` — the binding spec, including the dated smoke-test findings
-section and the decisions log.
+`docs/spec-v1.md` — the binding spec, including the dated smoke-test
+findings section and the decisions log.
 
 ## Source of truth
 

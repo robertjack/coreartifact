@@ -35,4 +35,4 @@ Load-bearing rulings baked into the schema:
 `docs/prd/PRD-0001-walking-skeleton/schema.md`** — consult it before any
 db.migration review or new-persistence design; it is the reference the
 decomposer and integration-reviewer consume. CONTEXT.md is the canonical
-vocabulary; spec-v1.md holds the observed hook payload shapes.
+vocabulary; docs/spec-v1.md holds the observed hook payload shapes.
