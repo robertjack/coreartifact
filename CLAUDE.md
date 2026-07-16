@@ -58,12 +58,13 @@ findings section and the decisions log.
   $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md) ·
   PRD-0002 evidence depth drafted (2026-07-15; $150; grill record in
   docs/prd/PRD-0002-evidence-depth/prd.md).
-- Next: the PRD-0002 recording pass — operator-lane, BEFORE dispatch
-  (transcript fixtures, vitest stream, backgrounded probe,
-  `claude --version`; PRD R13) — then `aeh plan
-  docs/prd/PRD-0002-evidence-depth/prd.md`. Roles can write
-  `.claude/agent-memory/<own role>/**` mid-issue (aeh 704d6b5). The npm
-  name is reserved (2026-07-15). Geography lives in docs/map.md.
+- Next: `aeh plan docs/prd/PRD-0002-evidence-depth/prd.md` — the
+  recording pass is DONE (2026-07-15, findings 6–8 in
+  docs/recording-pass.md; PRD amended: cost = tokens exact + pinned
+  price table, R14 backgrounded-outcome join; tested range now
+  2.1.208–2.1.211). Roles can write `.claude/agent-memory/<own
+  role>/**` mid-issue (aeh 704d6b5). The npm name is reserved
+  (2026-07-15). Geography lives in docs/map.md.
 
 ## Repo conventions
 

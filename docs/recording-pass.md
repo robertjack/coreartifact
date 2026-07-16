@@ -161,3 +161,102 @@ WorktreeCreate recording additionally requires the delegating variant
 operator keyboard session in the same scratch repo with `REC_STREAM`
 exported, running at least one succeeding command, one failing command,
 one file edit, then a clean exit.
+
+---
+
+# Recording pass PRD-0002 — findings (2026-07-15)
+
+Recorded on **Claude Code 2.1.211**, macOS, driven from an assistant
+session on the operator's machine (a first: the scriptable scenarios ran
+as nested `claude -p` sessions; only the rulings stayed on the operator).
+Recorder: the same nine-event `jq -c` O_APPEND as production subscribes.
+Nested-agent protocol variant: `--permission-mode bypassPermissions` is
+refused for nested agents by the host's safety classifier — scoped
+`--allowedTools` rules replace it and change nothing about payload shape
+except `permission_mode`. The parent session's `CLAUDE*` env vars must be
+unset or they leak into the recorded session.
+
+## Stream status (new)
+
+| scenario | stream | transcript pair | oracle |
+|---|---|---|---|
+| cost-headless | `cost-headless.jsonl` (14 events) | yes | envelope, $0.555957 |
+| vitest | `vitest.jsonl` (8 events) | yes | envelope, $0.438619 |
+| background | `background.jsonl` (16 events) | yes | envelope, $0.674005 |
+| headless (2.1.209) | existing | **recovered** 2026-07-15 | none — shape only |
+| interactive (2.1.209) | existing | **recovered** 2026-07-15 | none — shape only |
+
+Pairs, oracles, and known values live in
+`tests/fixtures/transcripts/manifest.json`. The three new streams are
+deliberately NOT in the typed `tests/fixtures/manifest.json` — wiring
+them into the loader is routed campaign work.
+
+## FINDING 6: transcript shape — tokens exact, dollars absent, dedup mandatory
+
+- Usage lives on `type: "assistant"` lines at `.message.usage`
+  (`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+  `cache_creation_input_tokens`, …) with `.message.model` naming the
+  model and a top-level **`version`** field naming the Claude Code
+  release — the transcript self-identifies its writer (doctor gains a
+  per-session version source beyond `claude --version`).
+- **Multiple assistant lines share one `requestId` and repeat the SAME
+  usage object** (headless 2.1.209 pair: 17 assistant lines, 7 distinct
+  requestIds). A naive summer over-counts ~2.4×. The parse rule —
+  dedup by `requestId`, take usage once, sum across requests — was
+  validated by execution against the envelope oracle: **exact match**
+  (805 output / 12 input / 166,807 cache-read across 6 requests).
+- **No cost field exists anywhere in the transcript** (exhaustive key
+  search; the only "cost" hits are MCP tool names). Dollars exist only
+  invoker-side: `claude -p --output-format json` envelope
+  `total_cost_usd` + per-model `modelUsage[].costUSD` — invisible to
+  hooks, absent from transcripts. Operator ruling (2026-07-15): tokens
+  are parsed exactly; `cost_usd` is computed from a pinned per-model
+  price table, labeled derived, ABSENT for unpinned models; the price
+  table joins the fragile-dependency register. The envelope oracles are
+  the acceptance ground truth for that computation.
+- Transcript line-type zoo (parser must skip unknown types silently):
+  headless: assistant/user/system/attachment/last-prompt/queue-operation;
+  interactive adds file-history-snapshot/file-history-delta/mode/
+  permission-mode/ai-title.
+
+## FINDING 7: vitest output rides two different payload paths
+
+- A **passing** run lands in `PostToolUse.tool_response.stdout` — plain
+  text, **no ANSI codes**, with clean summary lines
+  (` Test Files  1 passed (1)` / `      Tests  2 passed (2)` /
+  `   Duration  65ms (…)`).
+- A **failing** run exits 1 and lands as **`PostToolUseFailure`, which
+  carries NO `tool_response`** (re-confirming 2.1.208/209): the entire
+  vitest output — summary lines AND failed test names — is embedded in
+  the `error` string after `"Exit code 1\n\n"`. The parser therefore
+  needs both input paths, and the failing path is doubly fragile
+  (string-embedded, undocumented).
+
+## FINDING 8: backgrounded-command outcome IS recoverable — via the TaskOutput join
+
+Open risk "backgrounded final outcome unverified" (2026-07-13), answered
+in the good direction on 2.1.211:
+
+- The backgrounding `PostToolUse` carries `tool_response.backgroundTaskId`
+  (observed value shape: `blczchubi`).
+- When the session later polls, `PostToolUse(TaskOutput)` events carry
+  `tool_input.task_id` (= that id) and `tool_response.task.{status,
+  output, exitCode}` — the completed poll held
+  `status: "completed", output: "PROBE_DONE\n", exitCode: 0`.
+- **Ingest can resolve a backgrounded command's outcome by joining
+  backgroundTaskId → later TaskOutput events in the same session.** No
+  poll before session end (or a SIGKILL) → no join → outcome stays
+  ABSENT, honestly. The tool is named `TaskOutput` on 2.1.211; the whole
+  join is undocumented surface → register entry, fail to ABSENT.
+
+## `claude --version` (doctor's source)
+
+Output shape observed on this machine: `2.1.211 (Claude Code)` — one
+line, semver first token, suffix in parentheses. Parse the first token;
+anything else → version ABSENT.
+
+## Tested range
+
+Fixtures now span **2.1.208–2.1.211** (streams on .209 and .211;
+smoke-test observations on .208). The spec's Compatibility stance range
+is bumped accordingly.

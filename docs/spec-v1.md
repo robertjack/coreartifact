@@ -251,7 +251,8 @@ hope — see `docs/recording-pass.md`.
 
 **The version-support contract (what we promise users).** Capture works on
 any version. Facets are verified against a named, tested range (currently
-**2.1.208–2.1.209**), published in the README. Outside that range, capture
+**2.1.208–2.1.211**, bumped 2026-07-15 by the PRD-0002 recording pass),
+published in the README. Outside that range, capture
 still records everything and facets may degrade to ABSENT — and `doctor`
 names which ones and why. We never silently guess a facet to preserve the
 appearance of support.
@@ -277,6 +278,8 @@ ABSENT, never to a guess:
 | `tool_response.backgroundTaskId` | outcome ABSENT | undocumented |
 | `agent_id` / `agent_type` | nesting keys | already renamed once (docs said `subagent_id`) |
 | `duration_ms` | command duration | undocumented |
+| per-model price table (2026-07-15) | cost_usd (PRD-0002) | pricing changes without notice; unpinned model → cost ABSENT, tokens stay |
+| `TaskOutput` task join (2026-07-15) | backgrounded outcome | undocumented tool + response shape; no poll → ABSENT |
 
 The trust spine — shas, footprint, commands, checks — rides only stable,
 documented surfaces. That was the original ruling and it is holding: every

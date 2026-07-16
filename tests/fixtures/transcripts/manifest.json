@@ -1,0 +1,198 @@
+{
+  "recordedAt": "2026-07-15",
+  "note": "PRD-0002 recording-pass raw materials. The three new streams (cost-headless, vitest, background) are deliberately NOT in ../manifest.json: wiring them into the typed loader is routed campaign work, never a drive-by (PRD-0002 Testing decisions). Envelope oracles are invoker-side ground truth (claude -p --output-format json) for the cost facet: the price-table computation must reproduce total_cost_usd exactly from the transcript-parsed tokens.",
+  "claudeVersionOutput": "2.1.211 (Claude Code)",
+  "pairs": [
+    {
+      "scenario": "cost-headless",
+      "stream": "tests/fixtures/cost-headless.jsonl",
+      "transcript": "tests/fixtures/transcripts/cost-headless.transcript.jsonl",
+      "envelope": "tests/fixtures/transcripts/cost-headless.envelope.json",
+      "claudeCodeVersion": "2.1.211",
+      "model": "claude-fable-5",
+      "oracle": {
+        "total_cost_usd": 0.555957,
+        "usage": {
+          "input_tokens": 12,
+          "cache_creation_input_tokens": 17439,
+          "cache_read_input_tokens": 166807,
+          "output_tokens": 805,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 17439,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 133,
+              "cache_read_input_tokens": 32172,
+              "cache_creation_input_tokens": 309,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 309
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-fable-5": {
+            "inputTokens": 12,
+            "outputTokens": 805,
+            "cacheReadInputTokens": 166807,
+            "cacheCreationInputTokens": 17439,
+            "webSearchRequests": 0,
+            "costUSD": 0.555957,
+            "contextWindow": 1000000,
+            "maxOutputTokens": 64000
+          }
+        },
+        "distinct_requests": 6
+      }
+    },
+    {
+      "scenario": "vitest",
+      "stream": "tests/fixtures/vitest.jsonl",
+      "transcript": "tests/fixtures/transcripts/vitest.transcript.jsonl",
+      "envelope": "tests/fixtures/transcripts/vitest.envelope.json",
+      "claudeCodeVersion": "2.1.211",
+      "model": "claude-fable-5",
+      "oracle": {
+        "total_cost_usd": 0.438619,
+        "usage": {
+          "input_tokens": 6,
+          "cache_creation_input_tokens": 17181,
+          "cache_read_input_tokens": 70639,
+          "output_tokens": 486,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 17181,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 244,
+              "cache_read_input_tokens": 27950,
+              "cache_creation_input_tokens": 4273,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 4273
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-fable-5": {
+            "inputTokens": 6,
+            "outputTokens": 486,
+            "cacheReadInputTokens": 70639,
+            "cacheCreationInputTokens": 17181,
+            "webSearchRequests": 0,
+            "costUSD": 0.438619,
+            "contextWindow": 1000000,
+            "maxOutputTokens": 64000
+          }
+        }
+      },
+      "suite": {
+        "files": 2,
+        "tests": 4,
+        "failed": 1,
+        "failed_name": "subtracts (deliberately red for the fixture)"
+      }
+    },
+    {
+      "scenario": "background",
+      "stream": "tests/fixtures/background.jsonl",
+      "transcript": "tests/fixtures/transcripts/background.transcript.jsonl",
+      "envelope": "tests/fixtures/transcripts/background.envelope.json",
+      "claudeCodeVersion": "2.1.211",
+      "model": "claude-fable-5",
+      "oracle": {
+        "total_cost_usd": 0.674005,
+        "usage": {
+          "input_tokens": 10,
+          "cache_creation_input_tokens": 22269,
+          "cache_read_input_tokens": 149225,
+          "output_tokens": 1586,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 22269,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 139,
+              "cache_read_input_tokens": 37181,
+              "cache_creation_input_tokens": 130,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 130
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-fable-5": {
+            "inputTokens": 10,
+            "outputTokens": 1586,
+            "cacheReadInputTokens": 149225,
+            "cacheCreationInputTokens": 22269,
+            "webSearchRequests": 0,
+            "costUSD": 0.674005,
+            "contextWindow": 1000000,
+            "maxOutputTokens": 64000
+          }
+        }
+      },
+      "probe": {
+        "background_task_id": "blczchubi",
+        "resolved_by": "PostToolUse(TaskOutput) tool_response.task",
+        "exitCode": 0
+      }
+    },
+    {
+      "scenario": "headless",
+      "stream": "tests/fixtures/headless.jsonl",
+      "transcript": "tests/fixtures/transcripts/headless.transcript.jsonl",
+      "envelope": null,
+      "claudeCodeVersion": "2.1.209",
+      "model": "claude-haiku-4-5-20251001",
+      "oracle": null,
+      "note": "transcript recovered 2026-07-15 from the surviving 2026-07-14 session; no envelope was kept — shape coverage only (17 assistant lines, 7 distinct requestIds: the dedup fixture)"
+    },
+    {
+      "scenario": "interactive",
+      "stream": "tests/fixtures/interactive.jsonl",
+      "transcript": "tests/fixtures/transcripts/interactive.transcript.jsonl",
+      "envelope": null,
+      "claudeCodeVersion": "2.1.209",
+      "model": null,
+      "oracle": null,
+      "note": "transcript recovered 2026-07-15; interactive sessions have no envelope by nature — covers the interactive-only line types (file-history-*, mode, ai-title)"
+    }
+  ]
+}

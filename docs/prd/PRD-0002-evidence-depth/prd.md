@@ -274,3 +274,47 @@ rule, `--session` override, standalone otherwise, rule recorded in the
 spool line · operator-lane recording (transcripts, vitest stream,
 backgrounded probe, `claude --version`) → all recorded before dispatch ·
 compile sketch confirmed as above.
+
+## Amendment (2026-07-15, recording pass — see docs/recording-pass.md findings 6–8)
+
+The R13 recording pass ran the same day the PRD landed (streams on
+2.1.211; the 2026-07-14 transcripts recovered before cleanup). Its
+findings sharpen four requirements and resolve three open risks:
+
+- **R5 sharpened (operator ruling).** The transcript carries exact
+  per-request tokens and the model name but NO dollar figure — dollars
+  are invoker-side only. The cost facet is therefore two-layered: token
+  counts parsed exactly (**dedup by `requestId`, then sum** — multiple
+  assistant lines repeat one request's usage; the rule reproduced the
+  envelope oracle exactly), and `cost_usd` computed from a **pinned
+  per-model price table**, labeled derived; an unpinned model yields
+  cost ABSENT with tokens present. The price table is a new
+  fragile-dependency register entry. Acceptance ground truth: the three
+  envelope oracles in `tests/fixtures/transcripts/manifest.json` —
+  the computation must reproduce `total_cost_usd` to the digit.
+- **R4 sharpened.** Vitest output rides two payload paths: a passing
+  run in `tool_response.stdout` (plain text, no ANSI, stable summary
+  lines), a failing run inside `PostToolUseFailure.error` after
+  `"Exit code 1\n\n"` (PostToolUseFailure carries no `tool_response`).
+  The parser handles both; failed test names are present in the error
+  string.
+- **New criterion R14 — backgrounded outcome join** (open risk 2
+  resolved in the GOOD direction; amends PRD-0001 R8's "outcome-absent
+  is final"): ingest resolves a backgrounded command's outcome by
+  joining `tool_response.backgroundTaskId` to later
+  `PostToolUse(TaskOutput)` events (`tool_input.task_id`,
+  `tool_response.task.{status, output, exitCode}`). Replaying
+  `background.jsonl` yields the backgrounded command's outcome resolved
+  (exit 0); replaying it truncated before the completed poll yields
+  outcome ABSENT — no poll, no join, no guess.
+- **R8 sharpened.** `claude --version` emits one line,
+  `2.1.211 (Claude Code)` — parse the first token, anything else →
+  ABSENT. Transcript lines carry a `version` field naming their writer:
+  doctor additionally reports the per-session recorded version when
+  transcripts are readable (drift context for free).
+- **R13 DONE.** Five transcript pairs + three new streams + oracles
+  committed; the three new streams are deliberately outside the typed
+  fixture manifest — wiring loader + manifest is the fixtures issue's
+  routed work, per Testing decisions.
+- Open risks 1 (transcript schema) and 3 (`claude --version`) are
+  resolved by observation; risk 2 became R14 above.
