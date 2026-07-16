@@ -1,3 +1,4 @@
 - [Review defect patterns](review_defect_patterns.md) — green gates ≠ met acceptance; the acceptance tests are agent-written happy-path restatements. Break vectors that work here.
 - [ISS-0015 home-override dead assertion](iss0015_home_override_dead_assertion.md) — "never touches real home" assertion is vacuous when test sets HOME and the override to the same tmpdir.
 - [ISS-0016 bytes-unchanged proxy assertion](iss0016_bytes_unchanged_proxy_assertion.md) — "all other payload bytes unchanged" guarded only by .toEqual on parsed JSON; pretty-print mutant stays green. Impl itself is byte-faithful (S2).
+- [ISS-0022 uninstall backup gaps](iss0022_uninstall_backup_gaps.md) — F102/104/105 clean; F103 gate re-opens via re-init baseline pollution (S2) + typeof-object array/null trap (S3).
