@@ -2,8 +2,47 @@ import { describe, it, expect, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { openLedger, SCHEMA_VERSION } from "../../../src/core/ledger.js";
+import { openLedger, SCHEMA_VERSION, LedgerPathIsDirectoryError } from "../../../src/core/ledger.js";
+
+// Spawns a real second process that opens `dbPath`, takes `BEGIN EXCLUSIVE`
+// (a real, cross-process SQLite lock -- not a same-process/synchronous stand-
+// in, which cannot contend: gotchas.md #4), writes `signalPath` once the lock
+// is held, then holds it for `holdMs` before rolling back and exiting. Returns
+// a promise that resolves once the signal file appears (i.e. once the lock is
+// confirmed held), and a handle to await full child exit later.
+function spawnLockHolder(dbPath: string, signalPath: string, holdMs: number) {
+  const script = `
+    const { DatabaseSync } = require("node:sqlite");
+    const fs = require("node:fs");
+    const [, dbPath, signalPath, holdMsRaw] = process.argv;
+    const holdMs = Number(holdMsRaw);
+    const db = new DatabaseSync(dbPath);
+    db.exec("PRAGMA busy_timeout = 0");
+    db.exec("BEGIN EXCLUSIVE");
+    db.prepare("UPDATE meta SET lines_seen = lines_seen WHERE id = 1").run();
+    fs.writeFileSync(signalPath, "locked");
+    const ia = new Int32Array(new SharedArrayBuffer(4));
+    Atomics.wait(ia, 0, 0, holdMs);
+    db.exec("ROLLBACK");
+    db.close();
+  `;
+  const child = spawn(process.execPath, ["-e", script, "--", dbPath, signalPath, String(holdMs)], {
+    stdio: "inherit",
+  });
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  const locked = new Promise<void>((resolve, reject) => {
+    const deadline = Date.now() + 5000;
+    const poll = () => {
+      if (fs.existsSync(signalPath)) return resolve();
+      if (Date.now() > deadline) return reject(new Error("lock holder never signaled"));
+      setTimeout(poll, 20);
+    };
+    poll();
+  });
+  return { locked, exited };
+}
 
 function inspect(dbPath: string) {
   const raw = new DatabaseSync(dbPath);
@@ -186,5 +225,69 @@ describe("openLedger", () => {
     expect(sessionCount).toBe(0);
 
     handle.close();
+  });
+
+  it(
+    "S1: a concurrent writer's real cross-process lock on a VALID v2 ledger must never cause a delete -- openLedger throws instead of returning a wiped ledger",
+    { timeout: 15000 },
+    async () => {
+      const dbPath = path.join(tmpDir, "ledger.db");
+      const signalPath = path.join(tmpDir, "lock.signal");
+
+      // Seed a valid, distinguishable v2 ledger: nonzero cursor values so a
+      // silent wipe (reset to 0) is unmistakable from a thrown error.
+      const seedHandle = openLedger(dbPath);
+      seedHandle.db.exec("UPDATE meta SET ingested_bytes = 4096, lines_seen = 12 WHERE id = 1");
+      seedHandle.close();
+      const statBefore = fs.statSync(dbPath);
+
+      // holdMs deliberately exceeds openLedger's busy_timeout (5000ms) so the
+      // probe is guaranteed to still be contending, not merely unlucky.
+      const holder = spawnLockHolder(dbPath, signalPath, 6000);
+      await holder.locked;
+
+      let thrown: unknown;
+      try {
+        openLedger(dbPath);
+      } catch (err) {
+        thrown = err;
+      }
+
+      await holder.exited;
+
+      expect(thrown).toBeDefined();
+      expect(thrown).toBeInstanceOf(Error);
+
+      // The file must be untouched: same inode (ino unchanged) and the
+      // seeded meta row intact, not a freshly recreated empty ledger.
+      const statAfter = fs.statSync(dbPath);
+      expect(statAfter.ino).toBe(statBefore.ino);
+      const raw = new DatabaseSync(dbPath);
+      try {
+        const meta = raw.prepare("SELECT schema_version, ingested_bytes, lines_seen FROM meta").get() as any;
+        expect(meta.schema_version).toBe(SCHEMA_VERSION);
+        expect(meta.ingested_bytes).toBe(4096);
+        expect(meta.lines_seen).toBe(12);
+      } finally {
+        raw.close();
+      }
+    }
+  );
+
+  it("S3: openLedger on a path that is a directory throws a named LedgerPathIsDirectoryError, not raw EISDIR", () => {
+    const dbPath = path.join(tmpDir, "ledger.db");
+    fs.mkdirSync(dbPath);
+
+    let thrown: unknown;
+    try {
+      openLedger(dbPath);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    // Named, not the raw fs EISDIR ("ERR_FS_EISDIR" / generic "Error").
+    expect((thrown as Error).name).toBe("LedgerPathIsDirectoryError");
+    expect(thrown).toBeInstanceOf(LedgerPathIsDirectoryError);
   });
 });

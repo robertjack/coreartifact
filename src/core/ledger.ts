@@ -17,7 +17,7 @@
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
 import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
-import { mkdirSync as mkdirSyncFn, existsSync as existsSyncFn, rmSync as rmSyncFn } from "node:fs";
+import { mkdirSync as mkdirSyncFn, existsSync as existsSyncFn, rmSync as rmSyncFn, statSync as statSyncFn } from "node:fs";
 
 interface SqliteStatement {
   run(...params: unknown[]): unknown;
@@ -35,6 +35,67 @@ const DatabaseSync = DatabaseSyncCtor as unknown as new (path: string) => Sqlite
 const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean }) => void;
 const existsSync = existsSyncFn as (path: string) => boolean;
 const rmSync = rmSyncFn as (path: string, options?: { force?: boolean }) => void;
+const statSync = statSyncFn as (path: string) => { isDirectory(): boolean };
+
+// The same busy_timeout is used for BOTH the rebuild-trigger probe connection
+// (needsRebuild) and the main connection opened afterward. A probe without a
+// busy_timeout fails IMMEDIATELY on "database is locked" instead of waiting
+// for a concurrent writer -- and an unclassified probe failure used to mean
+// "rebuild" (see needsRebuildError below), which deleted a perfectly valid
+// ledger out from under a live writer. Same timeout, same wait, on both.
+const BUSY_TIMEOUT_MS = 5000;
+
+// Thrown when openLedger's dbPath exists but is a directory. rmSync's raw
+// EISDIR is an unhelpful, unnamed failure at the delete-then-recreate step;
+// this surfaces the real problem before we ever get there.
+export class LedgerPathIsDirectoryError extends Error {
+  constructor(dbPath: string) {
+    super(`ledger path is a directory, not a database file: ${dbPath}`);
+    this.name = "LedgerPathIsDirectoryError";
+  }
+}
+
+// Thrown by needsRebuild when the rebuild-trigger probe hits a TRANSIENT
+// SQLite failure (the file is a valid, lockED-by-someone-else database) --
+// as opposed to a DEFINITIVE verdict that the file is the wrong version or
+// not a readable database at all. Rebuild-on-transient-failure is exactly
+// the data-loss bug this type exists to prevent: never delete on "I
+// couldn't check right now," only on "I checked and it's wrong."
+export class LedgerProbeTransientError extends Error {
+  constructor(dbPath: string, cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `could not determine ledger schema version at ${dbPath} (transient SQLite failure, not a version verdict): ${causeMessage}`
+    );
+    this.name = "LedgerProbeTransientError";
+    (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+// node:sqlite (better-sqlite-backed) errors surface as plain Error with
+// `code: "ERR_SQLITE_ERROR"` plus numeric `errcode`/string `errstr` fields
+// carrying the underlying SQLite result code -- verified BY EXECUTION on
+// this sandbox's Node (24.18.0): a real cross-connection BEGIN EXCLUSIVE
+// lock throws `{ code: "ERR_SQLITE_ERROR", errcode: 5, errstr: "database is
+// locked", message: "database is locked" }`. errcode 5 is SQLITE_BUSY, 6 is
+// SQLITE_LOCKED (a table-level lock variant of the same "try again" family),
+// 15 is SQLITE_PROTOCOL. These are the ONLY codes this function treats as
+// "not a verdict, try again" -- everything else (e.g. 14 SQLITE_CANTOPEN for
+// an unreadable/corrupt/absent file) stays a definitive rebuild trigger.
+const TRANSIENT_SQLITE_ERRCODES = new Set([5, 6, 15]);
+
+function isTransientSqliteError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const withCode = err as Error & { code?: string; errcode?: number };
+  if (withCode.code === "ERR_SQLITE_ERROR" && typeof withCode.errcode === "number") {
+    return TRANSIENT_SQLITE_ERRCODES.has(withCode.errcode);
+  }
+  // Fallback for shapes without the numeric errcode: match the message text
+  // node:sqlite is documented to produce for these same conditions.
+  return /database is locked|database table is locked|SQLITE_BUSY|SQLITE_LOCKED|SQLITE_PROTOCOL/i.test(
+    err.message
+  );
+}
 
 // v2 (PRD-0002 schema.md): schema_version bumps 1 -> 2. This is a REBUILD
 // TRIGGER, never a migration -- there is no ALTER path, this campaign or any
@@ -246,18 +307,29 @@ function dirnameOf(filePath: string): string {
 
 // A ledger whose meta.schema_version isn't the current SCHEMA_VERSION is
 // rebuilt from scratch: delete the file outright, never ALTER (schema.md
-// "rebuild trigger, never a migration"). Any failure to read that verdict
-// (missing meta table, corrupt file, unreadable row) is treated the same
-// way as a stale version -- fail toward rebuilding, never toward silently
-// keeping a schema this code doesn't understand.
+// "rebuild trigger, never a migration"). A DEFINITIVE failure to read that
+// verdict (missing meta table, corrupt file, not a database, empty file) is
+// treated the same way as a stale version -- fail toward rebuilding, never
+// toward silently keeping a schema this code doesn't understand.
+//
+// A TRANSIENT failure (a concurrent writer holds a lock on an otherwise
+// valid ledger) is NOT a verdict at all and must never be treated as one:
+// throw LedgerProbeTransientError instead of guessing. Rebuilding on "I
+// couldn't check" -- not "I checked and it's wrong" -- is exactly the
+// data-loss bug this split exists to prevent (see class doc above).
 function needsRebuild(dbPath: string): boolean {
   let probe: SqliteDatabase;
   try {
     probe = new DatabaseSync(dbPath);
-  } catch {
+  } catch (err) {
+    if (isTransientSqliteError(err)) throw new LedgerProbeTransientError(dbPath, err);
     return true;
   }
   try {
+    // Same busy_timeout as the main connection (openLedger below) -- without
+    // it, this probe fails IMMEDIATELY on a live writer's lock instead of
+    // waiting, and used to convert that immediate failure into "rebuild."
+    probe.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
     const metaTable = probe
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'")
       .all() as Array<{ name: string }>;
@@ -266,7 +338,8 @@ function needsRebuild(dbPath: string): boolean {
       | { schema_version: number }
       | undefined;
     return metaRow?.schema_version !== SCHEMA_VERSION;
-  } catch {
+  } catch (err) {
+    if (isTransientSqliteError(err)) throw new LedgerProbeTransientError(dbPath, err);
     return true;
   } finally {
     probe.close();
@@ -283,8 +356,13 @@ function needsRebuild(dbPath: string): boolean {
 // with reset cursors is always safe to hand back.
 export function openLedger(dbPath: string): LedgerHandle {
   mkdirSync(dirnameOf(dbPath), { recursive: true });
-  if (existsSync(dbPath) && needsRebuild(dbPath)) {
-    rmSync(dbPath, { force: true });
+  if (existsSync(dbPath)) {
+    if (statSync(dbPath).isDirectory()) {
+      throw new LedgerPathIsDirectoryError(dbPath);
+    }
+    if (needsRebuild(dbPath)) {
+      rmSync(dbPath, { force: true });
+    }
   }
   const db = new DatabaseSync(dbPath);
   // DatabaseSync defaults busy_timeout to 0, so a second process opening the
@@ -293,7 +371,7 @@ export function openLedger(dbPath: string): LedgerHandle {
   // openLedger calls died. This function's whole contract is that opening is
   // ordinary first-run setup — and PRD-0001 has `log` (which ingests) and the
   // dashboard reading the same ledger concurrently by design. Wait instead.
-  db.exec("PRAGMA busy_timeout = 5000");
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   db.exec(SCHEMA_SQL);
   db.prepare(
     "INSERT OR IGNORE INTO meta (id, schema_version, ingested_bytes, lines_seen) VALUES (1, ?, 0, 0)"
