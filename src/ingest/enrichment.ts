@@ -15,7 +15,7 @@
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { readFileSync as readFileSyncFn } from "node:fs";
-import { computeCostUsd } from "../core/priceTable.js";
+import { computeCostNumerator, numeratorToUsd } from "../core/priceTable.js";
 import { COST_ABSENCE_REASONS, type CostAbsenceReason } from "../core/absence.js";
 
 const readFileSync = readFileSyncFn as (path: string, encoding: string) => string;
@@ -181,28 +181,60 @@ export function enrichFromTranscript(transcriptPath: string | null): EnrichmentR
   let cacheCreationTokens = 0;
   let cacheCreation5mTokens = 0;
   let cacheCreation1hTokens = 0;
-  let model: string | null = null;
+  const distinctModels = new Set<string>();
+
+  // Pricing is per-request: each request's own `.message.model` prices ONLY
+  // that request's own usage (F127, ISS-0019 review) — a mixed-model
+  // transcript (subagents, /model switches, plan-mode differences all land
+  // in one transcript file) must never collapse to "price everything at the
+  // first request's model", which either fabricates a wildly wrong total
+  // (pinned model[0], unpinned/expensive model later) or discards a
+  // dominant pinned model's cost (unpinned model[0]). Costs sum across
+  // requests; the moment ANY usage-carrying request's model is unpinned,
+  // the whole cost degrades to ABSENT (all-or-nothing — partial pricing
+  // would itself be a fabricated figure) naming the FIRST unpinned model
+  // encountered, in file order. Token counts are price-independent and
+  // always sum in full regardless.
+  // Numerators (pre-division "USD * MTok" units) sum across requests and
+  // divide by MICROS_PER_MTOK exactly once at the end (numeratorToUsd) —
+  // dividing per request first would introduce floating-point drift that
+  // breaks the committed single-model oracles' exact-digit reproduction,
+  // since a single-model transcript is just the N==1 case of this same sum.
+  let costNumerator: number | null = 0;
+  let firstUnpinnedModel: string | null = null;
 
   for (const { model: requestModel, usage } of byRequestId.values()) {
-    if (model === null) model = requestModel;
+    distinctModels.add(requestModel);
     inputTokens += usage.inputTokens;
     outputTokens += usage.outputTokens;
     cacheReadTokens += usage.cacheReadTokens;
     cacheCreationTokens += usage.cacheCreationTokens;
     cacheCreation5mTokens += usage.cacheCreation5mTokens;
     cacheCreation1hTokens += usage.cacheCreation1hTokens;
+
+    if (costNumerator === null) continue; // already degraded; keep summing tokens only
+    const requestNumerator = computeCostNumerator(requestModel, {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheCreation5mTokens: usage.cacheCreation5mTokens,
+      cacheCreation1hTokens: usage.cacheCreation1hTokens,
+    });
+    if (requestNumerator === null) {
+      costNumerator = null;
+      firstUnpinnedModel = requestModel;
+    } else {
+      costNumerator += requestNumerator;
+    }
   }
 
-  const costUsd =
-    model !== null
-      ? computeCostUsd(model, {
-          inputTokens,
-          outputTokens,
-          cacheReadTokens,
-          cacheCreation5mTokens,
-          cacheCreation1hTokens,
-        })
-      : null;
+  const costUsd = costNumerator === null ? null : numeratorToUsd(costNumerator);
+
+  // model column: a single distinct model across the transcript's requests
+  // is recorded; a mix has no single "the model" to display (a lone value
+  // would misinform), so it stores NULL — distinct from the unpinned-cost
+  // degradation above, which is about pricing, not this display field.
+  const model = distinctModels.size === 1 ? [...distinctModels][0] : null;
 
   return {
     tokensInput: inputTokens,
@@ -212,6 +244,8 @@ export function enrichFromTranscript(transcriptPath: string | null): EnrichmentR
     costUsd,
     model,
     ccVersion,
-    costAbsenceReason: costUsd === null && model !== null ? COST_ABSENCE_REASONS.modelUnpinned(model) : null,
+    costAbsenceReason: costUsd === null && firstUnpinnedModel !== null
+      ? COST_ABSENCE_REASONS.modelUnpinned(firstUnpinnedModel)
+      : null,
   };
 }

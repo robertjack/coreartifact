@@ -202,3 +202,69 @@ describe("enrichFromTranscript: unpinned model", () => {
     expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-sonnet-5"));
   });
 });
+
+// F127 (ISS-0019 review): a transcript's requests each carry their OWN
+// `.message.model` — a session using subagents or a /model switch mixes
+// models within one transcript file. Pricing must be per-request, summed;
+// collapsing to "price everything at the first request's model" either
+// fabricates a wildly wrong total or discards a dominant pinned model's
+// cost, depending which end is unpinned.
+function usageOf(inputTokens: number, outputTokens: number): Record<string, unknown> {
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+  };
+}
+
+describe("enrichFromTranscript: mixed-model transcripts (F127)", () => {
+  it("prices each request at ITS OWN model and sums — not everything at the first request's model", () => {
+    // req_1: claude-fable-5, 100 in / 100 out.
+    //   cost = (100*10 + 100*50) / 1e6 = (1000 + 5000) / 1e6 = 0.006
+    // req_2: claude-haiku-4-5-20251001, 1,000,000 in / 1,000,000 out.
+    //   cost = (1_000_000*1 + 1_000_000*5) / 1e6 = 6_000_000 / 1e6 = 6.0
+    // correct total = 0.006 + 6.0 = 6.006
+    //
+    // The OLD (buggy) code priced the SUMMED tokens (1,000,100 in /
+    // 1,000,100 out) entirely at the first-seen model, claude-fable-5:
+    //   (1_000_100*10 + 1_000_100*50) / 1e6 = 1_000_100*60 / 1e6 = 60.006
+    // — a 10x-over fabricated figure. This test pins the CORRECT value and
+    // fails against the old collapse-to-first-model code.
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-fable-5", usageOf(100, 100)),
+      assistantLine("req_2", "claude-haiku-4-5-20251001", usageOf(1_000_000, 1_000_000)),
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(1_000_100);
+    expect(result.tokensOutput).toBe(1_000_100);
+    expect(result.costUsd).toBeCloseTo(6.006, 9);
+    expect(result.costAbsenceReason).toBeNull();
+    // Two distinct models in one transcript: no single "the model" to
+    // display, so the model column is NULL (mixed), never one of the two.
+    expect(result.model).toBeNull();
+  });
+
+  it("degrades cost to ABSENT naming the unpinned model when the mix includes one, but still sums tokens", () => {
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-fable-5", usageOf(100, 100)),
+      assistantLine("req_2", "claude-sonnet-5", usageOf(1_000_000, 1_000_000)), // unpinned
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(1_000_100);
+    expect(result.tokensOutput).toBe(1_000_100);
+    expect(result.costUsd).toBeNull();
+    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-sonnet-5"));
+    // Mixed models (pinned + unpinned) — no single "the model" to display.
+    expect(result.model).toBeNull();
+  });
+
+  it("single-model transcripts are unaffected: model column and cost stay exact (oracle arithmetic unchanged)", () => {
+    const filePath = writeTranscript([assistantLine("req_1", "claude-fable-5", usageOf(100, 100))]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.model).toBe("claude-fable-5");
+    expect(result.costUsd).toBeCloseTo(0.006, 9);
+    expect(result.costAbsenceReason).toBeNull();
+  });
+});
