@@ -22,7 +22,11 @@ Restore the backed-up content VERBATIM (`writeFileSync(path, rawString)`),
 never by re-parsing and re-serializing (`JSON.stringify(obj, null, 2)`
 always destroys the original's whitespace/formatting/trailing-newline
 state — there is no way to recover that after the fact without a raw-bytes
-backup taken before the first overwrite).
+backup taken before the first overwrite) -- **but only when nothing has
+touched the file since the write you are inverting.** See
+[[feedback_invert_merge_two_path]] for the correction: blind verbatim
+restore is itself destructive against a file edited *after* the write you
+are undoing (round 2 caught this as S1, twice).
 
 **Why:** ISS-0022 (uninstall) needed byte-identical restoration of a
 pre-existing `.claude/settings.local.json`/`.gitignore`, but `init.ts` was
