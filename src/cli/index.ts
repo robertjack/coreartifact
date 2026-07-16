@@ -34,6 +34,7 @@ declare const process: {
 import { initCommand } from "./commands/init.js";
 import { logCommand } from "./commands/log.js";
 import { showCommand } from "./commands/show.js";
+import { uninstallCommand } from "./commands/uninstall.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -56,6 +57,11 @@ export const COMMANDS: CommandSpec[] = [
   { name: "init", summary: "Register this repo and start capturing sessions", handler: () => initCommand() },
   { name: "log", summary: "List sessions across registered ledgers", handler: () => logCommand() },
   { name: "show", summary: "Show a single session in detail", handler: (args) => showCommand(args) },
+  {
+    name: "uninstall",
+    summary: "Remove coreartifact from this repo (destructive; requires --yes or a TTY confirmation)",
+    handler: (args) => uninstallCommand(args),
+  },
 ];
 
 function usage(): string {
