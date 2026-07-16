@@ -45,7 +45,7 @@ describe('ISS-0010 ledger', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iss0010-ledger-'));
   });
 
-  it('openLedger on a path with no database file creates the parent directory if absent, creates the schema v1 tables meta, sessions, events and footprint plus the index on events(session_id, seq), and inserts the single meta row with schema_version 1, ingested_bytes 0 and lines_seen 0; opening the same path again returns the existing ledger without altering row counts.', async () => {
+  it('openLedger on a path with no database file creates the parent directory if absent, creates the schema tables meta, sessions, events and footprint plus the index on events(session_id, seq), and inserts the single meta row with the current schema_version, ingested_bytes 0 and lines_seen 0; opening the same path again returns the existing ledger without altering row counts.', async () => {
     const mod = await loadLedgerModule();
     const dbPath = path.join(tmpDir, 'nested', 'dir', 'ledger.db');
 
@@ -62,7 +62,7 @@ describe('ISS-0010 ledger', () => {
     expect(first.metaRows).toHaveLength(1);
     expect(first.metaRows[0]).toMatchObject({
       id: 1,
-      schema_version: 1,
+      schema_version: 2, // operator amendment 2026-07-16: ISS-0013 bumps schema v1->v2 (drop-and-reingest law); the literal was over-pinned, the criterion is unchanged
       ingested_bytes: 0,
       lines_seen: 0,
     });
@@ -77,7 +77,7 @@ describe('ISS-0010 ledger', () => {
     expect(second.metaRows).toHaveLength(1);
     expect(second.metaRows[0]).toMatchObject({
       id: 1,
-      schema_version: 1,
+      schema_version: 2, // operator amendment 2026-07-16: ISS-0013 bumps schema v1->v2 (drop-and-reingest law); the literal was over-pinned, the criterion is unchanged
       ingested_bytes: 0,
       lines_seen: 0,
     });
