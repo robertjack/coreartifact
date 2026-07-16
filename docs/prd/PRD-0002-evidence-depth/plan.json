@@ -1,0 +1,117 @@
+{
+  "prdId": "PRD-0002",
+  "issues": [
+    {
+      "id": "ISS-0013",
+      "path": "docs/issues/ISS-0013.md"
+    },
+    {
+      "id": "ISS-0014",
+      "path": "docs/issues/ISS-0014.md"
+    },
+    {
+      "id": "ISS-0015",
+      "path": "docs/issues/ISS-0015.md"
+    },
+    {
+      "id": "ISS-0016",
+      "path": "docs/issues/ISS-0016.md"
+    },
+    {
+      "id": "ISS-0017",
+      "path": "docs/issues/ISS-0017.md"
+    },
+    {
+      "id": "ISS-0018",
+      "path": "docs/issues/ISS-0018.md"
+    },
+    {
+      "id": "ISS-0019",
+      "path": "docs/issues/ISS-0019.md"
+    },
+    {
+      "id": "ISS-0020",
+      "path": "docs/issues/ISS-0020.md"
+    },
+    {
+      "id": "ISS-0021",
+      "path": "docs/issues/ISS-0021.md"
+    },
+    {
+      "id": "ISS-0022",
+      "path": "docs/issues/ISS-0022.md"
+    },
+    {
+      "id": "ISS-0023",
+      "path": "docs/issues/ISS-0023.md"
+    },
+    {
+      "id": "ISS-0024",
+      "path": "docs/issues/ISS-0024.md"
+    }
+  ],
+  "criteria": [
+    {
+      "criterion": "R1 Check runs and records. coreartifact check <name> -- <cmd> runs the command, appends exactly one check line to the spool (never a direct ledger write), and exits with the wrapped command's exit code. After ingest: a check row with name, command, pass/fail, and captured output (truncated at a named cap with a truncation flag when exceeded). A failing command records a failing check; the check itself still records (recording is not conditional on success).",
+      "issueId": "ISS-0017"
+    },
+    {
+      "criterion": "R2 Checks survive rebuild. Deleting the ledger and re-ingesting rebuilds check rows equivalent to the originals — checks are spool ground truth, the ledger stays a pure projection.",
+      "issueId": "ISS-0017"
+    },
+    {
+      "criterion": "R3 Check binding (single-open-session rule). At check time with exactly one open session in the repo's ledger, the check binds to it; with zero or several open, it records standalone (session NULL — never a guess); --session <id> always wins; an unknown --session id exits nonzero naming the id. The resolved binding and which rule produced it are recorded in the spool line itself.",
+      "issueId": "ISS-0017"
+    },
+    {
+      "criterion": "R4 Parser interface, vitest first. Test-output parsing sits behind a pluggable interface at ingest (never in the hook artifact); exactly one parser ships. For a session whose recorded stream contains a real vitest run: the session gains a test-results facet with pass/fail/skip counts, failed test names, and duration, rendered in show. A command no parser claims records no test-results facet — distinguishable from a vitest run reporting zero tests (degradation law).",
+      "issueId": "ISS-0018"
+    },
+    {
+      "criterion": "R5 Cost enrichment, fail-soft. After ingest of a stream whose paired transcript fixture is present at the session's transcript path: the session carries cost and token counts matching the fixture's known values, rendered with a derived marker in log and show. Transcripts are read in place, never copied (law).",
+      "issueId": "ISS-0019"
+    },
+    {
+      "criterion": "R6 Cost degradation is explicit. A missing transcript file → cost ABSENT with reason \"transcript unavailable\". A hand-authored drifted transcript (shape outside the pinned parse) → cost ABSENT with a reason naming the mismatch — never zero, never estimated — and ingest completes normally. Deleting the ledger and re-ingesting after the transcript appears retroactively regains the facet (drift is recoverable, not lossy).",
+      "issueId": "ISS-0019"
+    },
+    {
+      "criterion": "R7 Drift detector. Whenever ingest degrades a facet to ABSENT, it records an absence reason naming the facet and the missing/mismatched source (the fragile-dependency register is the enumeration). Replaying a hand-authored stream with model stripped from SessionStart yields kind ABSENT plus an absence record naming the missing key. Absence records survive ledger rebuild (derived from the spool).",
+      "issueId": "ISS-0020"
+    },
+    {
+      "criterion": "R8 Doctor. coreartifact doctor (read-only) reports: the running Claude Code version (obtained by executing claude --version; rendered ABSENT when the binary is unavailable — asserted with a controlled PATH), the tested version range (named constant, the README's stamp), every facet currently ABSENT with its reason, and any worktree missing the settings file. Exit 0 when nothing degrades; nonzero, naming each finding, when anything does.",
+      "issueId": "ISS-0021"
+    },
+    {
+      "criterion": "R9 Uninstall. After init → captured session → uninstall --yes: the repo tree is byte-identical to its pre-init snapshot (hook config entries, artifact, spool, ledger, gitignore line, and propagated worktree copies all gone); a pre-existing settings file keeps its unrelated user keys; the registry folds the repo out (a remove op is appended — the log is never rewritten) and log no longer lists it. Without --yes on a TTY, uninstall names what will be deleted and requires confirmation.",
+      "issueId": "ISS-0022"
+    },
+    {
+      "criterion": "R10 Consent, asked once. First init on the machine asks the one opt-in question (anonymous weekly ping, version + install id), default no; the answer and a generated install id persist globally; subsequent inits in other repos do not re-ask. Non-interactive init (no TTY) records \"no\" without hanging — the fleet lane never blocks on a prompt.",
+      "issueId": "ISS-0023"
+    },
+    {
+      "criterion": "R11 Ping, opt-in and inert. With consent off: zero network attempts across all CLI commands (asserted through the injected transport — silence is the test). With consent on and the last ping older than the named weekly interval: exactly one POST to the pinned endpoint constant whose payload contains exactly two fields, version and install id — nothing else ever (law). A second invocation inside the interval sends nothing. A failing/unreachable endpoint changes no command's output or exit code (fire-and-forget). The ping rides only the CLI entry — never the hook artifact.",
+      "issueId": "ISS-0023"
+    },
+    {
+      "criterion": "R12 Render. log gains derived-marked cost and a checks column; show heads the timeline with cost (derived marker) and renders checks and test results as badge lines. Absent renders with the explicit absent marker, asserted for cost-absent and test-results-absent (the R12/PRD-0001 pattern extended).",
+      "issueId": "ISS-0024"
+    },
+    {
+      "criterion": "R13 Fixtures wired for the loop. The typed fixture manifest and loader expose the three recording-pass PRD-0002 streams (cost-headless, vitest, background) alongside the five v1 scenarios, each stamped with its Claude Code version, and expose the committed transcript pairs with their envelope oracle values (total cost and token counts) for cost-headless, vitest and background plus the recovered headless and interactive transcripts; the fixtures layer supplies the one sanctioned substitution — a transcript-substituting replay wrapper that rewrites transcript_path in delivered payloads to a tmpdir copy of the paired transcript fixture — while every committed fixture file stays byte-verbatim.",
+      "issueId": "ISS-0016"
+    },
+    {
+      "criterion": "R14 Backgrounded outcome join. Ingest resolves a backgrounded command's outcome by joining the backgrounding event's backgroundTaskId to later TaskOutput events in the same session and reading the matched task's exit code. Replaying background.jsonl yields the backgrounded command's outcome resolved (exit 0); replaying it truncated before the completed poll yields outcome ABSENT — no poll, no join, no guess.",
+      "issueId": "ISS-0024"
+    }
+  ],
+  "driftNotes": [
+    "PRD Testing decisions place the sanctioned transcript substitution 'in the replayer' (tests/acceptance/harness/fixtureReplayer.ts), but the footprint rule forbids any PRD-0002 issue from editing another issue's acceptance dir — the PRD-0001 harness included. The substitution therefore lands in a fixtures-owned wrapper (tests/fixtures/transcriptReplay.ts) that composes the harness's exported replayLines primitive by import; behavior is identical, committed fixtures stay byte-verbatim, and the harness stays byte-unchanged. If a future campaign needs to edit the harness itself, that is operator hand-work on MAIN.",
+    "The previous plan marked every persistence-adjacent issue db=true, which tripped the migration-chain rule for a chain that cannot exist: the PRD's schema-evolution law is delete-and-reingest, never ALTER, and there is no migration tier. Only ISS-0013 (schema v2 created wholesale, risk high) carries db=true; consumer slices write rows through that settled schema and carry db=false. docs/map.md and CONTEXT.md should not describe a migrations surface for this repo — none exists by design.",
+    "Render (src/render/log.ts, src/render/show.ts, tests/unit/render/**) is the PRD's flagged shared surface, touched by R4, R5 and R12. It is now serialized by ownership: ISS-0018 owns show.ts (adds the test-results badge), ISS-0019 owns log.ts and the render unit tests and depends on ISS-0018, ISS-0024 touches all three and depends on both. src/render/absent.ts remains unowned prior art from PRD-0001 that three issues touch additively.",
+    "The harness's readers.ts was about to accrete per-campaign row readers (checks, test_results, absences); those are instead exported from the ledger module ISS-0013 owns, keeping the PRD-0001 harness a frozen prior-art artifact that later campaigns copy verbatim rather than a growing shared surface."
+  ]
+}
