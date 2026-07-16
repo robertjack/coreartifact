@@ -9,7 +9,7 @@
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { openSync as openSyncFn, fstatSync as fstatSyncFn, readSync as readSyncFn, closeSync as closeSyncFn } from "node:fs";
 import { getPaths } from "../core/paths.js";
-import { openLedger } from "../core/ledger.js";
+import { openLedger, LedgerPathIsDirectoryError, type LedgerHandle } from "../core/ledger.js";
 import { parseSpoolLine, type EnvelopeGit, type CheckFields } from "../core/envelope.js";
 import { resolveAttribution } from "../core/attribution.js";
 import { deriveStatus } from "../core/status.js";
@@ -29,6 +29,55 @@ const readSync = readSyncFn as (
 const closeSync = closeSyncFn as (fd: number) => void;
 // Buffer.alloc — a global; re-typed to the NodeBuffer surface this module uses.
 declare const Buffer: { alloc(size: number): NodeBuffer };
+// setTimeout — a global; used only by openLedgerWithRetry's backoff below.
+declare function setTimeout(callback: () => void, ms: number): unknown;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+// Proven by execution (F119, ISS-0017 round-2 review): openLedger's own
+// rebuild-trigger probe (core/ledger.ts's needsRebuild) can misjudge a
+// ledger file a CONCURRENT process is still in the middle of first-ever
+// creating -- a brand-new file legitimately has zero tables for the instant
+// before its creator's `db.exec(SCHEMA_SQL)` lands, and a second process's
+// probe reads that instant as "wrong schema" and deletes the file out from
+// under the still-writing creator. The creator then fails, and the exact
+// SQLite error text observed by execution varied by timing across repeated
+// runs -- "database is locked", "attempt to write a readonly database",
+// "disk I/O error" -- all the same underlying race (the file disappeared
+// mid-write), just different points where SQLite's C layer notices. This
+// file owns no part of core/ledger.ts (out of footprint) -- fixing the race
+// at its source is a separate slice's job; here, ingest retries the WHOLE
+// openLedger call with backoff instead, which needs no ledger-side change:
+// on retry, the winning process's file is either fully created (existsSync
+// + correct schema, an ordinary open) or fully absent again (this call
+// becomes the creator). Enumerating every SQLite error string this race can
+// surface is a losing game (proven by execution: the list above grew every
+// time this was measured) -- so every openLedger failure is retried EXCEPT
+// the one genuinely definitive, non-racy verdict openLedger can return:
+// the ledger path is a directory, not a database file. A fleet's worth of
+// concurrent first-time `check`/`log` runs is the exact workload this
+// exists to serialize instead of crash on.
+function isRetryableLedgerOpenError(err: unknown): boolean {
+  return !(err instanceof LedgerPathIsDirectoryError);
+}
+
+async function openLedgerWithRetry(dbPath: string): Promise<LedgerHandle> {
+  const MAX_ATTEMPTS = 40;
+  const RETRY_DELAY_MS = 25;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      return openLedger(dbPath);
+    } catch (err) {
+      if (!isRetryableLedgerOpenError(err)) throw err;
+      lastErr = err;
+      await delay(RETRY_DELAY_MS);
+    }
+  }
+  throw lastErr;
+}
 
 export interface SkippedLine {
   lineNo: number;
@@ -117,7 +166,7 @@ interface ParsedCheckLine {
 export async function ingest(repoRoot: string, options: IngestOptions = {}): Promise<IngestReport> {
   const now = options.now ?? (() => new Date().toISOString());
   const paths = getPaths(repoRoot);
-  const handle = openLedger(paths.ledger);
+  const handle = await openLedgerWithRetry(paths.ledger);
 
   try {
     const meta = handle.db.prepare("SELECT ingested_bytes, lines_seen FROM meta WHERE id = 1").get() as {
@@ -197,7 +246,16 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
       attributionBySession.set(sessionId, await resolveAttribution(cwd, repoRoot));
     }
 
-    handle.db.exec("BEGIN");
+    // BEGIN IMMEDIATE, not plain BEGIN (DEFERRED): a DEFERRED transaction
+    // starts as a reader and only takes the write lock on its first write,
+    // and SQLite returns SQLITE_BUSY on THAT upgrade WITHOUT ever invoking
+    // the busy handler -- so openLedger's busy_timeout (see core/ledger.ts)
+    // never applies and concurrent ingests die "database is locked" instead
+    // of serializing. IMMEDIATE takes the write lock at transaction start,
+    // where busy_timeout DOES apply (F119, ISS-0017 round-2 review; the
+    // reviewer's executed repro was 10 concurrent `check` processes against
+    // one repo, 4/10 crashed under plain BEGIN).
+    handle.db.exec("BEGIN IMMEDIATE");
     try {
       const insertEventStmt = handle.db.prepare(
         `INSERT INTO events (line_no, session_id, seq, ts, hook_event_name, prompt_id, agent_id, agent_type, tool_use_id, payload)

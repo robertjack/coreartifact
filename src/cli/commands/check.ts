@@ -34,6 +34,7 @@ interface SqliteStatement {
   all(...params: unknown[]): unknown[];
 }
 interface SqliteDatabase {
+  exec(sql: string): void;
   prepare(sql: string): SqliteStatement;
   close(): void;
 }
@@ -41,6 +42,15 @@ const DatabaseSync = DatabaseSyncCtor as unknown as new (
   path: string,
   options?: { readOnly?: boolean },
 ) => SqliteDatabase;
+
+// Same busy_timeout as core/ledger.ts's openLedger (F119, ISS-0017
+// round-2 review): DatabaseSync defaults busy_timeout to 0 REGARDLESS of
+// readOnly, so this reader can hit "database is locked" the instant a
+// concurrent writer holds the lock mid-commit, with no wait at all. Proven
+// by execution: even after ingest's own write transaction serializes
+// correctly (BEGIN IMMEDIATE), a fleet of concurrent `check` runs still
+// intermittently died right here, on this connection, without this pragma.
+const BUSY_TIMEOUT_MS = 5000;
 
 declare const process: {
   cwd(): string;
@@ -76,6 +86,7 @@ export async function checkCommand(args: string[]): Promise<number> {
   await ingest(repoRoot);
 
   const db = new DatabaseSync(paths.ledger, { readOnly: true });
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   let binding: ReturnType<typeof resolveBinding>;
   try {
     const rows = db.prepare("SELECT session_id, status FROM sessions").all() as SessionIdentityRow[];
