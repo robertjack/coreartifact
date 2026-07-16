@@ -7,7 +7,7 @@
 // Flat, not a tree (spec): entries render in `seq` order with no indentation
 // or grouping by agent_id — the nesting keys are carried on each entry but
 // v1 never nests the presentation.
-import { ABSENT_MARKER, renderAbsent } from "./absent.js";
+import { ABSENT_MARKER, renderAbsent, renderCostUsd } from "./absent.js";
 import type { Outcome } from "../facets/outcome.js";
 
 export interface ShowHeaderInput {
@@ -15,6 +15,9 @@ export interface ShowHeaderInput {
   shaBefore: string | null;
   shaAfter: string | null;
   footprint: string[];
+  // ISS-0019: the cost enrichment facet, rendered with a derived marker —
+  // see src/render/log.ts's own header comment for the same field.
+  costUsd: number | null;
 }
 
 // Free text (a prompt, a verbatim error) can itself carry embedded newlines
@@ -34,6 +37,7 @@ export function renderShowHeader(input: ShowHeaderInput): string {
     `sha_before:  ${renderAbsent(input.shaBefore)}`,
     `sha_after:   ${renderAbsent(input.shaAfter)}`,
     `footprint:   ${footprintText}`,
+    `cost:        ${renderCostUsd(input.costUsd)}`,
   ].join("\n");
 }
 

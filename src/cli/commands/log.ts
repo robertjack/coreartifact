@@ -43,6 +43,7 @@ interface SessionSummaryRow {
   status: string;
   kind: "headless" | "interactive" | null;
   started_at: string;
+  cost_usd: number | null;
 }
 
 interface EventCandidateRow {
@@ -115,7 +116,7 @@ export async function logCommand(): Promise<number> {
     }
 
     const sessions = db
-      .prepare("SELECT session_id, status, kind, started_at FROM sessions ORDER BY started_at")
+      .prepare("SELECT session_id, status, kind, started_at, cost_usd FROM sessions ORDER BY started_at")
       .all() as SessionSummaryRow[];
 
     for (const session of sessions) {
@@ -127,6 +128,7 @@ export async function logCommand(): Promise<number> {
         startedAt: session.started_at,
         commandCount: countBashCommands(db, session.session_id),
         footprintCount: countFootprint(db, session.session_id),
+        costUsd: session.cost_usd,
       });
     }
   });

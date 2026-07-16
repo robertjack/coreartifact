@@ -19,6 +19,7 @@ const baseInput: SessionLineInput = {
   startedAt: "2026-07-14T10:00:00.000Z",
   commandCount: 3,
   footprintCount: 2,
+  costUsd: 0.555957,
 };
 
 describe("renderSessionLine", () => {
@@ -45,6 +46,18 @@ describe("renderSessionLine", () => {
     const absentKind = renderSessionLine({ ...baseInput, kind: null });
     expect(zeroCommands).not.toContain(ABSENT_MARKER);
     expect(absentKind).toContain(ABSENT_MARKER);
+  });
+
+  it("renders a present cost_usd with a derived marker distinguishing it from spool-borne facets (ISS-0019)", () => {
+    const line = renderSessionLine({ ...baseInput, costUsd: 0.555957 });
+    expect(line).toContain("0.555957");
+    expect(line).toMatch(/derived/i);
+  });
+
+  it("renders an absent cost_usd (unavailable/drifted transcript, or an unpinned model) as the shared absent marker, never zero", () => {
+    const line = renderSessionLine({ ...baseInput, costUsd: null });
+    expect(line).toContain(ABSENT_MARKER);
+    expect(line).not.toContain("0  ");
   });
 });
 
