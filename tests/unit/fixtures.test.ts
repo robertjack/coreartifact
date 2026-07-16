@@ -234,9 +234,14 @@ process.stdin.on('end', () => {
         );
         expect(delivered.transcript_path).not.toBe(original.transcript_path);
 
-        const { transcript_path: _dtp, ...deliveredRest } = delivered;
-        const { transcript_path: _otp, ...originalRest } = original;
-        expect(deliveredRest).toEqual(originalRest);
+        // Operator amendment 2026-07-16 (review S2): byte-level guard —
+        // object equality let reformatting through (see the acceptance
+        // twin of this assertion for the rationale).
+        const expectedLine = originalLines[i].replace(
+          JSON.stringify(original.transcript_path),
+          JSON.stringify(delivered.transcript_path),
+        );
+        expect(recorded[i]).toBe(expectedLine);
       }
 
       expect(fs.existsSync(result.transcriptPath)).toBe(true);

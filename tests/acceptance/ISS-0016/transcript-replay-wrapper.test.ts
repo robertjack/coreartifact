@@ -116,11 +116,19 @@ describe("ISS-0016 transcript-substituting replay wrapper", () => {
         ).not.toBe(original.transcript_path);
         tmpTranscriptPathSeen = delivered.transcript_path;
 
-        const { transcript_path: _deliveredTp, ...deliveredRest } = delivered;
-        const { transcript_path: _originalTp, ...originalRest } = original;
-        expect(deliveredRest, `line ${i + 1}: every payload byte other than transcript_path is unchanged`).toEqual(
-          originalRest,
+        // Operator amendment 2026-07-16 (review S2): the criterion says
+        // BYTES unchanged — comparing reparsed objects let a reformat
+        // (e.g. pretty-printed JSON) through undetected. The expected
+        // delivered line is the original raw line with only the
+        // JSON-encoded transcript_path value substituted.
+        const expectedLine = originalLines[i].replace(
+          JSON.stringify(original.transcript_path),
+          JSON.stringify(delivered.transcript_path),
         );
+        expect(
+          recorded[i],
+          `line ${i + 1}: every payload byte other than transcript_path is unchanged`,
+        ).toBe(expectedLine);
       }
 
       expect(tmpTranscriptPathSeen, "at least one delivered payload was inspected").toBeTruthy();

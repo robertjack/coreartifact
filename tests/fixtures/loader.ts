@@ -128,7 +128,15 @@ export function loadTranscriptPair(scenario: string): TranscriptPair {
     oracle: pair.oracle
       ? {
           total_cost_usd: pair.oracle.total_cost_usd,
-          usage: pair.oracle.usage,
+          // Operator amendment 2026-07-16 (review S3): pick exactly the
+          // four declared token classes — passing the raw usage object
+          // through shipped undeclared fields under a 4-field type.
+          usage: {
+            input_tokens: pair.oracle.usage.input_tokens,
+            output_tokens: pair.oracle.usage.output_tokens,
+            cache_read_input_tokens: pair.oracle.usage.cache_read_input_tokens,
+            cache_creation_input_tokens: pair.oracle.usage.cache_creation_input_tokens,
+          },
           distinct_requests: pair.oracle.distinct_requests,
         }
       : null,
