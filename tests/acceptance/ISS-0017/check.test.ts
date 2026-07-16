@@ -135,6 +135,15 @@ describe("ISS-0017 check: evidence badges through the spool", () => {
         passResult.exitCode,
         "check did not exit with the wrapped command's own exit code (passing case)",
       ).toBe(0);
+      // Operator amendment 2026-07-16 (review S2 #121): the spec's "check
+      // wraps, it does not swallow" clause had zero acceptance coverage —
+      // a regression to capture-and-swallow kept every test green. The
+      // wrapped command's output must reach the USER's stream, not just
+      // the spool.
+      expect(
+        passResult.stdout,
+        "the wrapped command's stdout must stream through to the user (check wraps, it does not swallow)",
+      ).toContain("pass-output-marker");
 
       const spoolAfterPass = readSpoolCheckLines(paths.spool);
       expect(
