@@ -18,6 +18,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { createTmpRepo, runCli, type TmpRepo } from "../../acceptance/harness/index.js";
 import { getPaths } from "../../../src/core/paths.js";
 import { openLedger, type CheckRow } from "../../../src/core/ledger.js";
+import { ingest } from "../../../src/ingest/index.js";
 
 const CONCURRENCY = 10;
 
@@ -73,6 +74,73 @@ describe("concurrent check runs do not die 'database is locked'", () => {
         expect(names.has(`conc-${i}`), `no check row landed for conc-${i}`).toBe(true);
       }
       expect(rows.length, "every concurrent check must land exactly once").toBe(CONCURRENCY);
+    },
+    60000,
+  );
+
+  // F124 (ISS-0017 round-4 review): the variant above pre-creates the ledger
+  // via `init` before the concurrent fleet runs, which never exercises the
+  // first-creation race at all -- every process there opens an
+  // already-created, already-schema'd ledger. The real reviewer repro is a
+  // brand-new repo with NO init: N concurrent FIRST-EVER `check` processes,
+  // each racing to be the one that creates the ledger from scratch. Before
+  // the fix, `check`'s own second readOnly connection (opened AFTER ingest,
+  // outside ingest's retry loop) could observe the ledger mid-creation by a
+  // sibling process and die "attempt to write a readonly database" / "no
+  // such table: sessions" -- exit 1, with the wrapped command never having
+  // run at all, so the spool line count falls short of N.
+  it(
+    `${CONCURRENCY} concurrent FIRST-EVER 'coreartifact check' processes against a brand-new repo (no init) all pass through the wrapped command's exit code and all record`,
+    async () => {
+      const repo = await createTmpRepo();
+      tmpRepos.push(repo);
+      const opts = { cwd: repo.root, home: repo.home, registryPath: repo.registryPath };
+
+      // Deliberately NO `init` here -- every one of these `check` invocations
+      // is racing to be the first to ever create the ledger.
+      const results = await Promise.all(
+        Array.from({ length: CONCURRENCY }, (_, i) =>
+          runCli(["check", `first-${i}`, "--", "node", "-e", "process.exit(0)"], opts),
+        ),
+      );
+
+      for (const [i, result] of results.entries()) {
+        expect(
+          result.exitCode,
+          `check first-${i} did not pass through the wrapped command's exit code 0 (stderr: ${result.stderr})`,
+        ).toBe(0);
+      }
+
+      // `log` is a GLOBAL, registry-driven command (docs/issues/ISS-0007.md
+      // amendment) -- it unions every REGISTERED repo, never the cwd
+      // directly. This variant deliberately never runs `init`, so the repo
+      // is never registered and `runCli(["log"])` would be a silent no-op
+      // against it (proven while diagnosing this test: `log` exited 0 having
+      // touched nothing here). The in-process `ingest` this issue's own
+      // ingest module exports is the correct final-state read for an
+      // unregistered repo -- the same lazy-ingest-by-cwd mechanism `check`
+      // itself uses, just invoked directly instead of through another CLI
+      // command that assumes registration.
+      const paths = getPaths(repo.root);
+      const ingestReport = await ingest(repo.root);
+      expect(
+        ingestReport.skipped,
+        `final ingest must not skip any spool line: ${JSON.stringify(ingestReport.skipped)}`,
+      ).toEqual([]);
+
+      const handle = openLedger(paths.ledger);
+      let rows: CheckRow[];
+      try {
+        rows = handle.db.prepare("SELECT * FROM checks ORDER BY line_no").all() as CheckRow[];
+      } finally {
+        handle.close();
+      }
+
+      const names = new Set(rows.map((r) => r.name));
+      for (let i = 0; i < CONCURRENCY; i++) {
+        expect(names.has(`first-${i}`), `no check row landed for first-${i}`).toBe(true);
+      }
+      expect(rows.length, "every concurrent first-ever check must land exactly once").toBe(CONCURRENCY);
     },
     60000,
   );

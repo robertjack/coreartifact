@@ -63,17 +63,47 @@ function isRetryableLedgerOpenError(err: unknown): boolean {
   return !(err instanceof LedgerPathIsDirectoryError);
 }
 
-async function openLedgerWithRetry(dbPath: string): Promise<LedgerHandle> {
+// F124 (ISS-0017 round-4 review, proven by execution): the race described
+// above is NOT confined to openLedger()'s own internal window. Measured on
+// a fresh repo with 10 concurrent first-ever `check` processes: even after
+// wrapping ONLY the `openLedger(dbPath)` call in retry (this function's
+// prior shape), a process could still see openLedger() itself RETURN a
+// valid-looking handle and then hit "attempt to write a readonly database"
+// later, mid-transaction (BEGIN IMMEDIATE or a subsequent insert) -- a
+// concurrent SIBLING's own needsRebuild probe can still misjudge and delete
+// the file in the wider window between one process's successful open and
+// its transaction actually committing, not only during creation itself.
+// So the unit that gets retried is the WHOLE open-then-run sequence, using
+// a FRESH connection each attempt (the stale one is closed first) -- same
+// idempotency argument as before: retrying is always safe because
+// runIngestBody re-reads ingested_bytes/lines_seen fresh from whatever
+// handle it's given, and openLedger's own rebuild-vs-open logic decides
+// from scratch whether the retried attempt is an ordinary open or a
+// re-creation.
+async function withLedgerRetry<T>(dbPath: string, run: (handle: LedgerHandle) => Promise<T>): Promise<T> {
   const MAX_ATTEMPTS = 40;
   const RETRY_DELAY_MS = 25;
   let lastErr: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let handle: LedgerHandle | undefined;
     try {
-      return openLedger(dbPath);
+      handle = openLedger(dbPath);
+      return await run(handle);
     } catch (err) {
       if (!isRetryableLedgerOpenError(err)) throw err;
       lastErr = err;
       await delay(RETRY_DELAY_MS);
+    } finally {
+      // The failed attempt's connection (if it got that far) is never
+      // reused across a retry -- a fresh openLedger() call next attempt
+      // re-derives the real on-disk state instead of trusting a handle
+      // that may be pointed at a file a sibling process just deleted.
+      try {
+        handle?.close();
+      } catch {
+        // Closing an already-broken connection can itself throw; the
+        // retryable error above is what matters, not this cleanup.
+      }
     }
   }
   throw lastErr;
@@ -160,15 +190,31 @@ interface ParsedCheckLine {
   check: CheckFields;
 }
 
+// The open-session identity set (F124, ISS-0017 round-4 review): resolved by
+// `check`'s binding step. Deliberately just session_id + status -- the
+// smallest projection binding needs, read from the SAME connection ingest
+// already opened, never a second one.
+export interface SessionIdentityRow {
+  session_id: string;
+  status: string;
+}
+
 // Runs the whole algorithm (docs/issues/ISS-0006.md "The ingest algorithm
 // (contract)") inside a single transaction: event inserts and the cursor
-// advance commit atomically, so a crash rolls back both.
-export async function ingest(repoRoot: string, options: IngestOptions = {}): Promise<IngestReport> {
+// advance commit atomically, so a crash rolls back both. `handle` is already
+// open on entry and is never closed here -- the caller owns the connection
+// lifetime (see `ingest` and `ingestAndResolveSessions` below, the two
+// exported entry points that each open exactly one connection for their
+// whole lazy-ingest-then-read sequence).
+async function runIngestBody(
+  repoRoot: string,
+  options: IngestOptions,
+  handle: LedgerHandle,
+): Promise<IngestReport> {
   const now = options.now ?? (() => new Date().toISOString());
   const paths = getPaths(repoRoot);
-  const handle = await openLedgerWithRetry(paths.ledger);
 
-  try {
+  {
     const meta = handle.db.prepare("SELECT ingested_bytes, lines_seen FROM meta WHERE id = 1").get() as {
       ingested_bytes: number;
       lines_seen: number;
@@ -428,7 +474,34 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
     }
 
     return report;
-  } finally {
-    handle.close();
   }
+}
+
+// Lazy-ingest entry point for a plain read (`log`'s current shape): the
+// whole open-then-run sequence retries as one unit (see withLedgerRetry).
+export async function ingest(repoRoot: string, options: IngestOptions = {}): Promise<IngestReport> {
+  const paths = getPaths(repoRoot);
+  return withLedgerRetry(paths.ledger, (handle) => runIngestBody(repoRoot, options, handle));
+}
+
+// Lazy-ingest entry point for `check`'s binding step (F124, ISS-0017
+// round-4 review). Before this existed, `check` called `ingest` (which
+// opens-and-closes its own connection) and THEN opened a second, separate
+// readOnly connection to resolve the open-session set -- a second race
+// window against the exact first-creation race `openLedgerWithRetry` exists
+// to serialize (see the block comment above), unprotected by any retry.
+// This instead keeps ingest's own connection open just long enough to also
+// read the session identity set, so the whole lazy-ingest-then-read
+// sequence is ONE connection, ONE race window, already covered by the
+// retry loop above.
+export async function ingestAndResolveSessions(
+  repoRoot: string,
+  options: IngestOptions = {},
+): Promise<{ report: IngestReport; sessions: SessionIdentityRow[] }> {
+  const paths = getPaths(repoRoot);
+  return withLedgerRetry(paths.ledger, async (handle) => {
+    const report = await runIngestBody(repoRoot, options, handle);
+    const sessions = handle.db.prepare("SELECT session_id, status FROM sessions").all() as SessionIdentityRow[];
+    return { report, sessions };
+  });
 }

@@ -9,19 +9,32 @@
 // deleted ledger or spool lines newer than the last ingest still yield the
 // true open set (spec "Binding").
 //
+// F124 (ISS-0017 round-4 review): this used to open a SECOND, readOnly
+// connection after ingest to resolve the open-session set. busy_timeout
+// only covers ordinary SQLITE_BUSY contention on an established ledger --
+// it does nothing against the first-creation race (a brand-new repo, N
+// concurrent first-ever `check` processes racing to create the ledger),
+// which is a DIFFERENT connection hitting the SAME race window
+// `ingest`'s own retry loop already exists to serialize (see
+// src/ingest/index.ts's block comment). Reviewer repro: a fresh repo, no
+// init, 10-24 concurrent first-ever `check` runs -> intermittent "attempt
+// to write a readonly database" / "no such table: sessions", exit 1, the
+// wrapped command never even started. The fix is to never open that second
+// connection at all: `ingestAndResolveSessions` resolves the open-session
+// set from the SAME connection ingest already opened (and already retries),
+// so there is exactly one connection, one race window, already covered.
+//
 // @types/node is unreachable in this sandbox (no network, nothing cached —
-// see src/core/paths.ts) — the node:fs/node:sqlite imports below are
-// `@ts-ignore`d at the import site and re-typed through a local interface,
-// same pattern as src/cli/commands/show.ts.
+// see src/core/paths.ts) — the node:fs import below is `@ts-ignore`d at the
+// import site and re-typed through a local interface, same pattern as
+// src/cli/commands/show.ts.
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { mkdirSync as mkdirSyncFn, appendFileSync as appendFileSyncFn } from "node:fs";
-// @ts-ignore -- node:sqlite has no ambient types available in this sandbox
-import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
 import { getPaths } from "../../core/paths.js";
 import { resolveAttribution } from "../../core/attribution.js";
 import { serializeCheckLine } from "../../core/envelope.js";
-import { ingest } from "../../ingest/index.js";
+import { ingestAndResolveSessions } from "../../ingest/index.js";
 import { parseCheckArgv } from "../../check/argv.js";
 import { resolveBinding } from "../../check/binding.js";
 import { capOutput } from "../../check/cap.js";
@@ -30,37 +43,10 @@ import { runCheckedCommand } from "../../check/run.js";
 const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean }) => void;
 const appendFileSync = appendFileSyncFn as (path: string, data: string, options?: { flag?: string }) => void;
 
-interface SqliteStatement {
-  all(...params: unknown[]): unknown[];
-}
-interface SqliteDatabase {
-  exec(sql: string): void;
-  prepare(sql: string): SqliteStatement;
-  close(): void;
-}
-const DatabaseSync = DatabaseSyncCtor as unknown as new (
-  path: string,
-  options?: { readOnly?: boolean },
-) => SqliteDatabase;
-
-// Same busy_timeout as core/ledger.ts's openLedger (F119, ISS-0017
-// round-2 review): DatabaseSync defaults busy_timeout to 0 REGARDLESS of
-// readOnly, so this reader can hit "database is locked" the instant a
-// concurrent writer holds the lock mid-commit, with no wait at all. Proven
-// by execution: even after ingest's own write transaction serializes
-// correctly (BEGIN IMMEDIATE), a fleet of concurrent `check` runs still
-// intermittently died right here, on this connection, without this pragma.
-const BUSY_TIMEOUT_MS = 5000;
-
 declare const process: {
   cwd(): string;
   stderr: { write(chunk: string): boolean };
 };
-
-interface SessionIdentityRow {
-  session_id: string;
-  status: string;
-}
 
 function joinPath(...parts: string[]): string {
   return parts
@@ -82,24 +68,17 @@ export async function checkCommand(args: string[]): Promise<number> {
 
   // Reader: lazy ingest before resolving the open-session set, exactly like
   // `log`/`show` (spec "Binding") — a deleted ledger or unseen spool tail
-  // must still yield the true open set.
-  await ingest(repoRoot);
-
-  const db = new DatabaseSync(paths.ledger, { readOnly: true });
-  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
-  let binding: ReturnType<typeof resolveBinding>;
-  try {
-    const rows = db.prepare("SELECT session_id, status FROM sessions").all() as SessionIdentityRow[];
-    const knownSessionIds = new Set(rows.map((r) => r.session_id));
-    const openSessionIds = rows.filter((r) => r.status === "open").map((r) => r.session_id);
-    binding = resolveBinding({
-      explicitSessionId: parsed.session,
-      openSessionIds,
-      knownSessionIds,
-    });
-  } finally {
-    db.close();
-  }
+  // must still yield the true open set. The open-session identity set is
+  // read from ingest's OWN connection (F124) — no second connection, no
+  // second first-creation race window.
+  const { sessions: rows } = await ingestAndResolveSessions(repoRoot);
+  const knownSessionIds = new Set(rows.map((r) => r.session_id));
+  const openSessionIds = rows.filter((r) => r.status === "open").map((r) => r.session_id);
+  const binding = resolveBinding({
+    explicitSessionId: parsed.session,
+    openSessionIds,
+    knownSessionIds,
+  });
 
   if (!binding.ok) {
     process.stderr.write(`coreartifact check: unknown --session id: ${binding.unknownSessionId}\n`);
