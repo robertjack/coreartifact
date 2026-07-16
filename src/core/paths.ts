@@ -31,6 +31,11 @@ export interface Paths {
   // names the log file explicitly so later issues (e.g. ISS-0010) never
   // have to guess the filename.
   registry: string;
+  // The operator-state log (ISS-0015): install id, ping consent, last-ping
+  // time. It lives under the SAME overridable global root as the registry
+  // (registryRoot) — one env override isolates a test subprocess's entire
+  // global surface, so this is a sibling file, not a second root.
+  state: string;
 }
 
 function join(...parts: string[]): string {
@@ -60,5 +65,6 @@ export function getPaths(repoRoot: string = process.cwd()): Paths {
     hookArtifact: join(dataDir, "hooks", "capture.mjs"),
     registryRoot,
     registry: join(registryRoot, "registry.jsonl"),
+    state: join(registryRoot, "state.jsonl"),
   };
 }

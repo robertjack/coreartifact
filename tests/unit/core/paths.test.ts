@@ -50,6 +50,16 @@ describe("getPaths", () => {
     expect(paths.registry).toBe("/tmp/fixture-registry/registry.jsonl");
   });
 
+  it("derives the state-log path under the same registry root as the registry itself (ISS-0015)", () => {
+    delete process.env[REGISTRY_ROOT_ENV_VAR];
+    const defaultPaths = getPaths("/tmp/some-repo");
+    expect(defaultPaths.state).toBe(`${defaultPaths.registryRoot}/state.jsonl`);
+
+    process.env[REGISTRY_ROOT_ENV_VAR] = "/tmp/fixture-registry";
+    const overridden = getPaths("/tmp/some-repo");
+    expect(overridden.state).toBe("/tmp/fixture-registry/state.jsonl");
+  });
+
   it("ignores an empty-string override and falls back to the default", () => {
     process.env[REGISTRY_ROOT_ENV_VAR] = "";
     const withEmpty = getPaths("/tmp/some-repo");
