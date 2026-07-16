@@ -256,30 +256,41 @@ describe("ISS-0015 operator state", () => {
   });
 
   it("The state file lives under the same overridable global root as the registry, so a test subprocess never touches the operator's real home.", async () => {
+    // Operator amendment 2 (2026-07-16, re-review S2): the override must
+    // point at a root DISTINCT from this test's tmp HOME for the criterion
+    // to be falsifiable — beforeEach roots the override inside tmpHome, so
+    // a home-derived fallback path was byte-identical to the override path
+    // and none of the assertions below could ever redden (gotchas entry 4).
+    const distinctOverrideRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "iss0015-override-"),
+    );
+    process.env[REGISTRY_ROOT_ENV_VAR] = distinctOverrideRoot;
+
     const pathsMod = await loadPathsModule();
     const paths = pathsMod.getPaths();
 
-    const expectedRegistryRoot = tmpRegistryRoot;
+    const expectedRegistryRoot = distinctOverrideRoot;
     const expectedStatePath = path.join(expectedRegistryRoot, "state.jsonl");
 
-    // The override this test set in beforeEach (COREARTIFACT_REGISTRY_ROOT)
-    // is the SAME variable the registry already uses (paths.ts,
-    // REGISTRY_ROOT_ENV_VAR) — a second, state-specific override would mean
-    // isolating a test subprocess required setting two variables instead of
-    // one.
+    // The override variable (COREARTIFACT_REGISTRY_ROOT) is the SAME one
+    // the registry already uses (paths.ts, REGISTRY_ROOT_ENV_VAR) — a
+    // second, state-specific override would mean isolating a test
+    // subprocess required setting two variables instead of one.
     expect(paths.registryRoot).toBe(expectedRegistryRoot);
     expect(typeof paths.state).toBe("string");
     expect(paths.state).toBe(expectedStatePath);
 
-    // The state path never falls back to the real, un-overridden home
-    // directory. REAL_HOME_AT_LOAD is captured at module load, before the
-    // HOME override (operator amendment 2026-07-16 — capturing here read
-    // the override back and compared the tmp dir against itself).
+    // A home-derived fallback would land under tmpHome (this suite's HOME)
+    // or under the real home captured at module load; the distinct
+    // override root is under neither, so these genuinely discriminate.
+    expect(paths.state.startsWith(tmpHome)).toBe(false);
     expect(paths.state.startsWith(REAL_HOME_AT_LOAD)).toBe(false);
 
     // End-to-end: reading state through the module under the override never
     // throws and never has to fall back to the real home to resolve a path.
     const stateMod = await loadStateModule();
     await expect(stateMod.readState()).resolves.toBeTruthy();
+
+    fs.rmSync(distinctOverrideRoot, { recursive: true, force: true });
   });
 });
