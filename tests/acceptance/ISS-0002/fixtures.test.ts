@@ -136,16 +136,23 @@ describe("ISS-0002 R14 fixtures (recording pass)", () => {
     }
   });
 
-  it("The fixture manifest records, per stream, the recorded Claude Code version, the scenario name and the hook event names in order; a test asserts the manifest lists exactly the five scenarios interactive, headless, worktree, SIGTERM and SIGKILL, and that every stream file named by the manifest exists.", () => {
+  it("The fixture manifest records, per stream, the recorded Claude Code version, the scenario name and the hook event names in order; a test asserts the manifest lists the five v1 scenarios interactive, headless, worktree, SIGTERM and SIGKILL, and that every stream file named by the manifest exists.", () => {
     const manifest = readManifest();
     const entries = getStreamEntries(manifest);
 
     const scenarios = entries.map((e) => scenarioOf(e) ?? "");
     expect(new Set(scenarios).size, "manifest has duplicate or unnamed scenario entries").toBe(scenarios.length);
-    expect(
-      [...scenarios].sort(),
-      "manifest does not list exactly the five required scenarios: interactive, headless, worktree, SIGTERM, SIGKILL",
-    ).toEqual([...REQUIRED_SCENARIOS].sort());
+    // Operator amendment 2026-07-16 (ISS-0016 escalation): the original
+    // exact-set equality over-pinned an extensible surface — PRD-0002's
+    // R13 mandate adds scenarios to this same manifest, so any correct
+    // ISS-0016 implementation reddened this locked test. The PRD-0001
+    // intent is COVERAGE of the five v1 scenarios (they exist, stamped,
+    // replayable), not exclusivity; containment preserves that intent
+    // and survives future corpus growth. Every listed entry — including
+    // later additions — still passes the full per-entry validation below.
+    for (const required of REQUIRED_SCENARIOS) {
+      expect(scenarios, `manifest is missing required v1 scenario "${required}"`).toContain(required);
+    }
 
     for (const entry of entries) {
       const scenario = scenarioOf(entry) ?? "(unnamed scenario)";
