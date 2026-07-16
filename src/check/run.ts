@@ -13,12 +13,22 @@
 // @ts-ignore -- node:child_process has no ambient types available in this sandbox
 import { spawn as spawnFn } from "node:child_process";
 
-interface ChunkLike {
-  toString(encoding: string): string;
+// Chunks off a child's stdio pipe are raw Buffers. Decoding each chunk to
+// UTF-8 independently (the bug this shape prevents) corrupts any multi-byte
+// character whose bytes straddle a chunk boundary into U+FFFD on both sides
+// -- the passthrough stream AND the spool-captured output, which is
+// unrecoverable by re-ingest since the spool is ground truth forever.
+// Raw chunks are written through untouched and only concatenated+decoded
+// once, after the child closes.
+interface NodeBufferLike {
+  readonly length: number;
 }
+declare const Buffer: {
+  concat(chunks: NodeBufferLike[]): { toString(encoding: string): string };
+};
 
 interface ReadableStreamLike {
-  on(event: "data", listener: (chunk: ChunkLike) => void): void;
+  on(event: "data", listener: (chunk: NodeBufferLike) => void): void;
 }
 
 interface ChildProcessLike {
@@ -36,8 +46,8 @@ interface SpawnOptions {
 const spawn = spawnFn as (command: string, args: string[], options: SpawnOptions) => ChildProcessLike;
 
 declare const process: {
-  stdout: { write(chunk: string): boolean };
-  stderr: { write(chunk: string): boolean };
+  stdout: { write(chunk: NodeBufferLike): boolean };
+  stderr: { write(chunk: NodeBufferLike): boolean };
 };
 
 // Conventional Unix signal numbers for the names a killed child process
@@ -85,20 +95,19 @@ export function runCheckedCommand(argv: string[]): Promise<CheckRunResult> {
       return;
     }
     const child = spawn(command, args, { stdio: ["inherit", "pipe", "pipe"] });
-    let output = "";
+    const chunks: NodeBufferLike[] = [];
 
     child.stdout.on("data", (chunk) => {
-      const text = chunk.toString("utf8");
-      process.stdout.write(text);
-      output += text;
+      process.stdout.write(chunk);
+      chunks.push(chunk);
     });
     child.stderr.on("data", (chunk) => {
-      const text = chunk.toString("utf8");
-      process.stderr.write(text);
-      output += text;
+      process.stderr.write(chunk);
+      chunks.push(chunk);
     });
     child.on("error", reject);
     child.on("close", (code, signal) => {
+      const output = Buffer.concat(chunks).toString("utf8");
       resolvePromise({ exitCode: exitCodeFor(code, signal), output });
     });
   });
