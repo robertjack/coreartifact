@@ -74,4 +74,51 @@ describe("parseVitest", () => {
     expect(result!.passed).toBe(2);
     expect(result!.durationMs).toBeNull();
   });
+
+  // F-A (fix-mode adversarial review): a failing run's own FAIL-detail
+  // output can embed a console-logged line that LOOKS like a vitest summary
+  // line (line-start, leading whitespace — exactly what console.log("Tests
+  // ...") produces), preceding the REAL trailing summary block further
+  // down. The parser must anchor to the TRAILING block (the last "Test
+  // Files" line, with its "Tests" line immediately adjacent), never take
+  // the first "Tests"-shaped line anywhere in the text — a first-match scan
+  // parsed this exact input as {passed:99, failed:0} (a false green) when
+  // ground truth was 1 failed.
+  it("ignores a console-logged line that looks like a summary line and parses the real trailing summary block instead", () => {
+    const stdout = [
+      " RUN  v4.1.10 /fake/repo",
+      "",
+      " ❯ poison.test.js (1 test | 1 failed) 3ms",
+      "   × logs a fake summary line 3ms",
+      "",
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯",
+      "",
+      " FAIL  poison.test.js > logs a fake summary line",
+      "AssertionError: expected fake summary shape to not fool the parser",
+      "",
+      "stdout | poison.test.js > logs a fake summary line",
+      "     Tests  99 passed (99)",
+      "",
+      "",
+      " Test Files  1 failed (1)",
+      "      Tests  1 failed (1)",
+      "   Duration  50ms (transform 1ms, setup 0ms, import 1ms, tests 1ms, environment 0ms)",
+    ].join("\n");
+
+    const result = parseVitest("pnpm vitest run poison.test.js", stdout, "", 1);
+
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(0);
+    expect(result!.failed).toBe(1);
+    expect(result!.failedNames).toEqual(["logs a fake summary line"]);
+    expect(result!.durationMs).toBe(50);
+  });
+
+  it("still returns null (never a poison parse) when the trailing block is unparseable", () => {
+    const stdout = [
+      "     Tests  99 passed (99)",
+      "some unrelated tail output that never forms a real summary block",
+    ].join("\n");
+    expect(parseVitest("pnpm vitest run poison.test.js", stdout, "", 0)).toBeNull();
+  });
 });
