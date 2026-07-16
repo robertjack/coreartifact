@@ -257,7 +257,12 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       // would show. "65" (the vitest-reported duration, from the fixture's
       // own "Duration  65ms" summary line) can only appear on the passing
       // command's rendered line once a new test-results badge exists.
-      const passingLine = findLineWithAll(showResult.stdout, ["pnpm vitest run passing.test.js"]);
+      // Operator amendment 2026-07-16 (test_dispute): the single-token match
+      // resolved to the earlier UserPromptSubmit line — the fixture's prompt
+      // text literally embeds the command string — not the command's own
+      // rendered line. "command:" is the command-entry render prefix
+      // (src/render/show.ts), which prompt lines never carry.
+      const passingLine = findLineWithAll(showResult.stdout, ["command:", "pnpm vitest run passing.test.js"]);
       expect(
         passingLine,
         `expected the passing command's rendered line to carry its parsed vitest duration (65ms) as a test-results badge. Line: ${passingLine}`,
