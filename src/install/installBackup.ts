@@ -53,6 +53,13 @@ export function installBackupPath(repoRoot: string): string {
   return joinPath(repoRoot, ".coreartifact", "install-backup.json");
 }
 
+// The `.claude` directory's own backup-entry key for a given root -- shared
+// between the capture side (above) and uninstall.ts's F104 removal so the
+// two never drift on how the key is built.
+export function claudeDirBackupKey(root: string): string {
+  return joinPath(root, ".claude");
+}
+
 function readBackupFile(path: string): InstallBackup {
   if (!existsSync(path)) return { v: 1, entries: {} };
   try {
@@ -85,6 +92,18 @@ function captureOne(backup: InstallBackup, targetPath: string): void {
   }
 }
 
+// Directory existence only -- no `content` (directories have none). Keyed
+// by the directory's own path, which never collides with a file entry's key
+// (e.g. ".claude" vs ".claude/settings.local.json") in the same `entries`
+// map. Reviewer finding F104: uninstall needs to know whether `init` itself
+// created the `.claude/` directory (never remove a dir that pre-existed, or
+// one a user has since put other content into) before it can safely remove
+// an empty one it created.
+function captureDirExistence(backup: InstallBackup, dirPath: string): void {
+  if (dirPath in backup.entries) return;
+  backup.entries[dirPath] = { existed: existsSync(dirPath) };
+}
+
 // Idempotent and entirely best-effort: called from `mergeHookConfig`, which
 // existing unit tests (tests/unit/install/hookConfig.test.ts) call directly
 // with fabricated, nonexistent repo roots like "/repo" -- this must never
@@ -107,6 +126,7 @@ export function captureInstallBackup(repoRoot: string): void {
     for (const root of roots) {
       captureOne(backup, joinPath(root, ".claude", "settings.local.json"));
       captureOne(backup, joinPath(root, ".gitignore"));
+      captureDirExistence(backup, claudeDirBackupKey(root));
     }
 
     mkdirSync(joinPath(repoRoot, ".coreartifact"), { recursive: true });
@@ -120,4 +140,31 @@ export function captureInstallBackup(repoRoot: string): void {
 
 export function readInstallBackup(repoRoot: string): InstallBackup {
   return readBackupFile(installBackupPath(repoRoot));
+}
+
+// Whether repoRoot has a usable install-backup manifest -- reviewer finding
+// F103: `readInstallBackup` folds BOTH "the manifest file is entirely
+// absent" (e.g. `git clean -fdX` wiped the gitignored `.coreartifact/`) and
+// "the manifest is damaged/unparseable" down to the SAME empty-entries
+// shape as a real, valid, empty manifest. That fold is correct for
+// per-PATH decisions inside uninstall (docs/gotchas.md #5: an uncaptured
+// path is never guessed at) but is the wrong signal for the top-level
+// question "do we have a reliable inventory of what init did here at all?"
+// -- uninstall (src/cli/commands/uninstall.ts) calls this FIRST and refuses
+// the whole operation rather than silently proceeding as if nothing had
+// ever been installed.
+export function hasUsableInstallBackup(repoRoot: string): boolean {
+  const path = installBackupPath(repoRoot);
+  if (!existsSync(path)) return false;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    return Boolean(
+      parsed &&
+        typeof parsed === "object" &&
+        "entries" in parsed &&
+        typeof (parsed as { entries: unknown }).entries === "object",
+    );
+  } catch {
+    return false;
+  }
 }

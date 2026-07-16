@@ -15,10 +15,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { computePlan, performUninstall, resolveConsent, type ConsentIO } from "../../../src/install/uninstall.js";
-import { captureInstallBackup, readInstallBackup } from "../../../src/install/installBackup.js";
+import { captureInstallBackup, readInstallBackup, hasUsableInstallBackup, installBackupPath } from "../../../src/install/installBackup.js";
 import { mergeHookConfig } from "../../../src/install/hookConfig.js";
 import { ensureGitignoreLines } from "../../../src/install/gitignore.js";
-import { getPaths } from "../../../src/core/paths.js";
+import { getPaths, REGISTRY_ROOT_ENV_VAR } from "../../../src/core/paths.js";
+import { addLedger } from "../../../src/core/registry.js";
+import { uninstallCommand } from "../../../src/cli/commands/uninstall.js";
 
 function fakeIO(overrides: Partial<ConsentIO> & { isTTY: boolean }): ConsentIO {
   return {
@@ -228,6 +230,32 @@ describe("install/uninstall performUninstall — surgical inversion of init's me
     expect(finalLines).toEqual(["node_modules/", "coverage/"]);
   });
 
+  // Reviewer finding F102 (round 2, exact repro): a .gitignore that ALREADY
+  // contains `.coreartifact/` pre-init only gets `.claude/settings.local.json`
+  // appended by init; a post-init edit (dist/) makes this the "edited since
+  // init" strip path. The strip must remove only what init itself added
+  // (`.claude/settings.local.json`) -- never the user's own pre-existing
+  // `.coreartifact/` line, even though it's on the static ensure-list.
+  it("F102: strip path never deletes a user-owned gitignore line that merely matches init's static list", async () => {
+    writeFileSync(join(repoRoot, ".gitignore"), ".coreartifact/\nnode_modules/\n");
+    runRealInit(repoRoot); // init sees .coreartifact/ already present -- appends only the settings line
+
+    const gitignorePath = join(repoRoot, ".gitignore");
+    writeFileSync(gitignorePath, `${readFileSync(gitignorePath, "utf8")}dist/\n`); // post-init edit
+
+    const plan = computePlan(repoRoot);
+    await performUninstall(plan, registryPath);
+
+    const finalLines = readFileSync(gitignorePath, "utf8")
+      .split("\n")
+      .filter((line) => line.length > 0);
+    expect(finalLines, "the user's own pre-existing .coreartifact/ line must survive uninstall").toEqual([
+      ".coreartifact/",
+      "node_modules/",
+      "dist/",
+    ]);
+  });
+
   it("a settings.local.json created by init (no pre-init file) is preserved, not deleted, when a post-init edit left it non-empty", async () => {
     runRealInit(repoRoot); // no pre-existing settings file -- init creates it from scratch
 
@@ -304,5 +332,206 @@ describe("install/uninstall performUninstall — surgical inversion of init's me
     } finally {
       execFileSync("git", ["worktree", "remove", "--force", worktreePath], { cwd: repoRoot });
     }
+  });
+
+  // Reviewer finding F104: a files-only view of the tree left an
+  // init-created, now-empty `.claude/` behind after uninstall, invisibly --
+  // the operator's snapshotTree amendment makes this show up as a directory
+  // diff. Uninstall must remove `.claude/` when init created it AND it is
+  // empty after the settings-file inversion.
+  it("F104: removes .claude/ entirely when init created it (no pre-init file) and it is empty after uninstall", async () => {
+    runRealInit(repoRoot); // no pre-existing .claude/ -- init creates the dir and the settings file
+
+    const claudeDir = join(repoRoot, ".claude");
+    expect(existsSync(claudeDir), "test setup invariant: init must have created .claude/").toBe(true);
+
+    const plan = computePlan(repoRoot);
+    await performUninstall(plan, registryPath);
+
+    expect(existsSync(claudeDir), "an init-created, now-empty .claude/ must be removed by uninstall").toBe(false);
+  });
+
+  it("F104: never removes .claude/ when it pre-existed init, even if it is empty after uninstall", async () => {
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true }); // .claude/ exists BEFORE init runs
+    runRealInit(repoRoot);
+
+    const claudeDir = join(repoRoot, ".claude");
+    const plan = computePlan(repoRoot);
+    await performUninstall(plan, registryPath);
+
+    expect(existsSync(claudeDir), "a .claude/ directory that pre-existed init must never be removed by uninstall").toBe(
+      true,
+    );
+  });
+
+  it("F104: never removes .claude/ when a user has put other content in it, even though init created the directory", async () => {
+    runRealInit(repoRoot); // no pre-existing .claude/ -- init creates it
+
+    const claudeDir = join(repoRoot, ".claude");
+    mkdirSync(join(claudeDir, "commands"), { recursive: true });
+    writeFileSync(join(claudeDir, "commands", "user-command.md"), "# not coreartifact's to delete\n");
+
+    const plan = computePlan(repoRoot);
+    await performUninstall(plan, registryPath);
+
+    expect(
+      existsSync(join(claudeDir, "commands", "user-command.md")),
+      "user content under .claude/ must survive uninstall even when init created the directory",
+    ).toBe(true);
+  });
+
+  // Reviewer finding F105: restoring a pre-existing settings.local.json
+  // whose parent .claude/ directory was deleted post-init (e.g. `rm -r
+  // .claude`) must recreate the directory rather than crash ENOENT and wedge
+  // uninstall permanently (every re-run hits the identical crash).
+  it("F105: init -> rm -r .claude -> uninstall --yes succeeds and restores the pre-init settings file, not wedged", async () => {
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true });
+    const preInitSettingsBytes = '{"customUserKey":"keep-me-untouched"}';
+    writeFileSync(join(repoRoot, ".claude", "settings.local.json"), preInitSettingsBytes);
+    runRealInit(repoRoot); // pre-existing settings file, merged by init
+
+    rmSync(join(repoRoot, ".claude"), { recursive: true, force: true }); // simulate `rm -r .claude`
+
+    const plan = computePlan(repoRoot);
+    // Must not throw ENOENT.
+    await expect(performUninstall(plan, registryPath)).resolves.toBeUndefined();
+
+    const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+    expect(existsSync(settingsPath), "the pre-init settings file must be restored even though its parent dir was deleted").toBe(
+      true,
+    );
+    expect(readFileSync(settingsPath, "utf8")).toBe(preInitSettingsBytes);
+
+    // A second run (the "every re-run identical" wedge symptom the finding
+    // describes) must also succeed cleanly, not throw again.
+    const secondPlan = computePlan(repoRoot);
+    await expect(performUninstall(secondPlan, registryPath)).resolves.toBeUndefined();
+  });
+});
+
+// Reviewer finding F103: a missing/damaged install-backup manifest is a
+// different question from "was this ONE path ever captured" (the F96/S1
+// scenario the suite above already covers) -- it means uninstall has NO
+// reliable inventory of what init did to this repo at all, and must refuse
+// the whole operation loudly rather than silently degrading to "leave
+// everything untouched" while still deleting `.coreartifact/` and
+// tombstoning the registry (a fabricated success, docs/gotchas.md #5).
+describe("install/installBackup hasUsableInstallBackup (F103)", () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = realpathSync(mkdtempSync(join(tmpdir(), "iss22-backup-presence-unit-")));
+  });
+
+  afterEach(() => {
+    rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  it("is false when .coreartifact/install-backup.json does not exist at all", () => {
+    expect(existsSync(installBackupPath(repoRoot))).toBe(false);
+    expect(hasUsableInstallBackup(repoRoot)).toBe(false);
+  });
+
+  it("is false when the manifest file exists but is not parseable JSON", () => {
+    mkdirSync(join(repoRoot, ".coreartifact"), { recursive: true });
+    writeFileSync(installBackupPath(repoRoot), "{not valid json");
+    expect(hasUsableInstallBackup(repoRoot)).toBe(false);
+  });
+
+  it("is true for a real, valid (even empty-entries) manifest", () => {
+    // captureInstallBackup shells out to `git worktree list` -- needs a real
+    // git repo, unlike the two absence/damage cases above which never reach
+    // that call.
+    execFileSync("git", ["init", "-q"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.email", "test@coreartifact.invalid"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.name", "Coreartifact Test"], { cwd: repoRoot });
+    writeFileSync(join(repoRoot, ".gitkeep"), "");
+    execFileSync("git", ["add", "."], { cwd: repoRoot });
+    execFileSync("git", ["commit", "-q", "-m", "initial commit"], { cwd: repoRoot });
+
+    captureInstallBackup(repoRoot);
+    expect(hasUsableInstallBackup(repoRoot)).toBe(true);
+  });
+});
+
+describe("cli/commands/uninstall uninstallCommand (F103: refuses loudly on a missing manifest)", () => {
+  let repoRoot: string;
+  let registryRoot: string;
+  let registryPath: string;
+  let originalCwd: string;
+  let originalRegistryRootEnv: string | undefined;
+
+  beforeEach(() => {
+    repoRoot = realpathSync(mkdtempSync(join(tmpdir(), "iss22-cmd-unit-")));
+    execFileSync("git", ["init", "-q"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.email", "test@coreartifact.invalid"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.name", "Coreartifact Test"], { cwd: repoRoot });
+    writeFileSync(join(repoRoot, ".gitkeep"), "");
+    execFileSync("git", ["add", "."], { cwd: repoRoot });
+    execFileSync("git", ["commit", "-q", "-m", "initial commit"], { cwd: repoRoot });
+
+    registryRoot = mkdtempSync(join(tmpdir(), "iss22-cmd-unit-registry-"));
+    registryPath = join(registryRoot, "registry.jsonl");
+
+    originalCwd = process.cwd();
+    originalRegistryRootEnv = process.env[REGISTRY_ROOT_ENV_VAR];
+    process.chdir(repoRoot);
+    process.env[REGISTRY_ROOT_ENV_VAR] = registryRoot;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalRegistryRootEnv === undefined) delete process.env[REGISTRY_ROOT_ENV_VAR];
+    else process.env[REGISTRY_ROOT_ENV_VAR] = originalRegistryRootEnv;
+    rmSync(repoRoot, { recursive: true, force: true });
+    rmSync(registryRoot, { recursive: true, force: true });
+  });
+
+  it("exits nonzero, names the missing manifest, and deletes/tombstones nothing when .coreartifact/install-backup.json is gone (e.g. git clean -fdX)", async () => {
+    // Real init, so live hook config actually exists in settings.local.json
+    // and .gitignore -- exactly what F103 says must NOT be left behind
+    // while uninstall still claims success.
+    const paths = getPaths(repoRoot);
+    const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+    const merged = mergeHookConfig({}, paths.hookArtifact, repoRoot);
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true });
+    writeFileSync(settingsPath, `${JSON.stringify(merged, null, 2)}\n`);
+    ensureGitignoreLines(join(repoRoot, ".gitignore"), [".coreartifact/", ".claude/settings.local.json"]);
+    await addLedger(repoRoot, registryPath);
+
+    // Simulate `git clean -fdX` wiping the gitignored .coreartifact/
+    // directory (which held the install-backup manifest) while the live
+    // settings.local.json and .gitignore survive untouched.
+    rmSync(join(repoRoot, ".coreartifact"), { recursive: true, force: true });
+    expect(existsSync(installBackupPath(repoRoot)), "test setup invariant: manifest must be gone").toBe(false);
+
+    const settingsBefore = readFileSync(settingsPath, "utf8");
+    const gitignoreBefore = readFileSync(join(repoRoot, ".gitignore"), "utf8");
+    const registryBefore = readFileSync(registryPath);
+
+    const stderrChunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    let exitCode: number;
+    try {
+      exitCode = await uninstallCommand(["--yes"]);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(exitCode, "uninstall must exit nonzero when the install-backup manifest is missing").not.toBe(0);
+    expect(stderrChunks.join(""), "the refusal must name the missing manifest").toContain("install-backup");
+
+    expect(readFileSync(settingsPath, "utf8"), "live hook config in settings.local.json must survive untouched").toBe(
+      settingsBefore,
+    );
+    expect(
+      readFileSync(join(repoRoot, ".gitignore"), "utf8"),
+      "live gitignore entries must survive untouched",
+    ).toBe(gitignoreBefore);
+    expect(readFileSync(registryPath).equals(registryBefore), "the registry must not be tombstoned").toBe(true);
   });
 });

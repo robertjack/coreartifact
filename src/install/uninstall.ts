@@ -28,15 +28,15 @@
 // the import site and re-typed through a local interface.
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
-import { existsSync as existsSyncFn, readFileSync as readFileSyncFn, rmSync as rmSyncFn, unlinkSync as unlinkSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
+import { existsSync as existsSyncFn, mkdirSync as mkdirSyncFn, readdirSync as readdirSyncFn, readFileSync as readFileSyncFn, rmdirSync as rmdirSyncFn, rmSync as rmSyncFn, unlinkSync as unlinkSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
 // @ts-ignore -- node:readline/promises has no ambient types available in this sandbox
 import { createInterface as createInterfaceFn } from "node:readline/promises";
 import { getPaths, type Paths } from "../core/paths.js";
 import { removeLedger } from "../core/registry.js";
 import { listOtherWorktreePaths } from "./gitRepo.js";
-import { readInstallBackup, type InstallBackup, type BackupEntry } from "./installBackup.js";
+import { readInstallBackup, claudeDirBackupKey, type InstallBackup, type BackupEntry } from "./installBackup.js";
 import { applyHookConfig, removeHookConfig } from "./hookConfig.js";
-import { COREARTIFACT_GITIGNORE_LINES, computeGitignoreOutput, removeGitignoreLines } from "./gitignore.js";
+import { COREARTIFACT_GITIGNORE_LINES, computeGitignoreOutput, linesInitAdded, removeGitignoreLines } from "./gitignore.js";
 
 declare const process: {
   stdin: { isTTY?: boolean };
@@ -44,7 +44,10 @@ declare const process: {
 };
 
 const existsSync = existsSyncFn as (path: string) => boolean;
+const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean }) => void;
+const readdirSync = readdirSyncFn as (path: string) => string[];
 const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => string;
+const rmdirSync = rmdirSyncFn as (path: string) => void;
 const rmSync = rmSyncFn as (path: string, options?: { recursive?: boolean; force?: boolean }) => void;
 const unlinkSync = unlinkSyncFn as (path: string) => void;
 const writeFileSync = writeFileSyncFn as (path: string, data: string) => void;
@@ -60,6 +63,14 @@ function joinPath(...parts: string[]): string {
     .filter((part) => part.length > 0)
     .join("/")
     .replace(/\/{2,}/g, "/");
+}
+
+// Hand-rolled dirname (same rationale as core/registry.ts's dirnameOf): this
+// module owns no shared path-join module and node:path's ambient types are
+// unreachable in this sandbox.
+function dirnameOf(filePath: string): string {
+  const idx = filePath.lastIndexOf("/");
+  return idx <= 0 ? "/" : filePath.slice(0, idx);
 }
 
 export interface UninstallTarget {
@@ -167,8 +178,14 @@ function restoreSettingsFile(
     // Already absent. If init created the file, absence already matches the
     // pre-init snapshot -- nothing to do. If a file existed pre-init and is
     // now gone (removed by something other than coreartifact), byte-identity
-    // with the pre-init snapshot still requires it back.
-    if (entry.existed) writeFileSync(path, preInitContent);
+    // with the pre-init snapshot still requires it back -- but its parent
+    // directory may ALSO be gone (reviewer finding F105, e.g. someone `rm
+    // -r .claude`'d the whole directory): recreate it first, or writeFileSync
+    // throws ENOENT and wedges uninstall permanently.
+    if (entry.existed) {
+      mkdirSync(dirnameOf(path), { recursive: true });
+      writeFileSync(path, preInitContent);
+    }
     return;
   }
 
@@ -227,7 +244,11 @@ function restoreGitignoreFile(entry: BackupEntry | undefined, path: string): voi
     return;
   }
 
-  const stripped = removeGitignoreLines(currentContent, COREARTIFACT_GITIGNORE_LINES);
+  // Only lines init itself added FOR THIS FILE (relative to its own pre-init
+  // content) are ours to strip -- never every line on the static list, or a
+  // user's own pre-existing `.coreartifact/` entry gets destroyed alongside
+  // it (reviewer finding F102).
+  const stripped = removeGitignoreLines(currentContent, linesInitAdded(preInitContent, COREARTIFACT_GITIGNORE_LINES));
   if (!entry.existed && stripped === "") {
     unlinkSync(path);
   } else {
@@ -235,10 +256,35 @@ function restoreGitignoreFile(entry: BackupEntry | undefined, path: string): voi
   }
 }
 
+// Removes `.claude/` at `root` iff (a) init's own install-backup manifest
+// recorded it as NOT existing pre-init (never a dir the repo already had, or
+// one whose creation this uninstall run never captured -- docs/gotchas.md
+// #5, never guess), and (b) it is now empty after the settings-file
+// inversion above ran (never a dir a user has since put other content into,
+// e.g. `.claude/commands/`). Reviewer finding F104: a files-only view of the
+// tree left this directory behind invisibly; the operator's amended
+// snapshotTree now captures directories, so this is required for the
+// byte-identical acceptance bar.
+function removeClaudeDirIfInitCreatedAndEmpty(backup: InstallBackup, root: string): void {
+  const dirPath = claudeDirBackupKey(root);
+  const entry = backup.entries[dirPath];
+  if (!entry || entry.existed) return;
+  if (!existsSync(dirPath)) return;
+  try {
+    if (readdirSync(dirPath).length === 0) rmdirSync(dirPath);
+  } catch {
+    // Best-effort: never let a directory-removal race (something wrote into
+    // it between the readdirSync check and the rmdirSync call) fail the
+    // rest of uninstall, which has already restored/removed the files that
+    // matter.
+  }
+}
+
 export async function performUninstall(plan: UninstallPlan, registryPath?: string): Promise<void> {
   for (const target of plan.targets) {
     restoreSettingsFile(plan.backup.entries[target.settingsPath], target.settingsPath, plan.paths.hookArtifact, plan.repoRoot);
     restoreGitignoreFile(plan.backup.entries[target.gitignorePath], target.gitignorePath);
+    removeClaudeDirIfInitCreatedAndEmpty(plan.backup, target.root);
   }
   // .coreartifact/ holds the hook artifact, the spool, the ledger, and the
   // install-backup manifest itself -- one removal covers all four (spec

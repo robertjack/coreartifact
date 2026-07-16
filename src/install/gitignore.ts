@@ -56,17 +56,35 @@ export function ensureGitignoreLines(gitignorePath: string, linesToEnsure: strin
   return true;
 }
 
+// The subset of `linesToEnsure` init ITSELF actually appended for this one
+// file, computed against that file's own pre-init content -- exactly the
+// same "missing" computation computeGitignoreOutput above performs, exposed
+// separately so uninstall's strip path (removeGitignoreLines below) never
+// removes a line just because it happens to match the static
+// COREARTIFACT_GITIGNORE_LINES list (reviewer finding F102): if the user's
+// PRE-INIT .gitignore already contained `.coreartifact/`, init appended
+// nothing for that line, so uninstall must never strip it even though it's
+// on the list -- only lines init's own merge actually added are ours to
+// remove.
+export function linesInitAdded(preInitContent: string, linesToEnsure: string[]): string[] {
+  const preInitLines = normalizeLines(preInitContent);
+  return linesToEnsure.filter((line) => !preInitLines.has(line));
+}
+
 // Inverse of computeGitignoreOutput (ISS-0022 uninstall): removes exactly
 // `linesToRemove` from `content`, wherever they appear, preserving every
 // other line, its order, and `content`'s own trailing-newline state -- never
 // the pre-init file's, since `content` here is the CURRENT file, which may
-// carry lines appended after init ran.
+// carry lines appended after init ran. Matches by EXACT line bytes, never
+// trimmed (reviewer finding F102): a user's own `  .coreartifact/  ` (with
+// incidental whitespace) is the user's line, not the exact bytes init wrote,
+// so it must never be treated as init's own entry and stripped.
 export function removeGitignoreLines(content: string, linesToRemove: string[]): string {
   const remove = new Set(linesToRemove);
   const hadTrailingNewline = content.length > 0 && content.endsWith("\n");
   const allLines = content.split("\n");
   const lines = hadTrailingNewline ? allLines.slice(0, -1) : allLines;
-  const kept = lines.filter((line) => !remove.has(line.trim()));
+  const kept = lines.filter((line) => !remove.has(line));
   if (kept.length === 0) return "";
   return hadTrailingNewline ? `${kept.join("\n")}\n` : kept.join("\n");
 }
