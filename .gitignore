@@ -10,3 +10,5 @@ dist/
 
 # Scratch git fixtures agents sometimes leave behind in the main checkout.
 submodule-source/
+.coreartifact/
+.claude/settings.local.json
