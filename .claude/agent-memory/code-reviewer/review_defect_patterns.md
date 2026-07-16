@@ -165,5 +165,29 @@ executing the built code (`dist/`) against adversarial inputs yourself. Specific
   omitting ts emits literal `"ts":undefined` (invalid JSON), parse ok:false. That's caller error,
   not a reader bug.
 
+## ISS-0013 (schema v2 + check line, executed 2026-07-16, commit 8c9f9ad)
+
+11. **A "rebuild trigger" that fails-open on ANY probe error DELETES valid ledgers under
+   concurrency.** `ledger.ts` `needsRebuild` opens a SECOND probe connection with NO
+   `PRAGMA busy_timeout` (the main conn got the pattern-#8 fix; the probe did not) and its
+   `catch { return true }` treats every error as "stale version → rebuild." Under a concurrent
+   EXCLUSIVE writer the probe's `SELECT ... FROM meta` throws `database is locked` → `return true`
+   → `rmSync(dbPath,{force:true})` DELETES a current-schema-version ledger and resets cursors,
+   destroying the concurrent writer's in-flight txn (split-brain: writer keeps the unlinked inode).
+   Reproduced deterministically: holder BEGIN EXCLUSIVE + opener openLedger → opener silently
+   returns a wiped ledger (ingested_bytes/lines_seen 0, sessions 0, inode changed), no throw. The
+   openLedger comment itself says log-ingest + dashboard read the ledger concurrently *by design*.
+   Fix: probe must set busy_timeout AND distinguish transient-lock/busy from a real version verdict
+   — only a definitive version mismatch or structural corruption may trigger delete; SQLITE_BUSY
+   must NOT. "Fail toward rebuild" is right for corruption, wrong for contention.
+12. **The bound_by-enum clause of a 3-part CHECK criterion is tested by a row that ALSO trips a
+   sibling CHECK, so it cannot fail.** ISS-0013 acceptance criterion 5 fixture for "bound_by outside
+   the enum" used `{session_id:null, bound_by:"sometimes"}` — which violates the all-or-nothing
+   `(session_id IS NULL)=(bound_by IS NULL)` CHECK too, so dropping the `bound_by IN (...)` CHECK
+   leaves the suite green (mutation M3: 0 failures). Implementation is correct (real schema rejects
+   `session_id='s',bound_by='x'` — verified), but the clause is unverified. To isolate an enum
+   CHECK, the fixture must SATISFY every sibling constraint (both non-null) and violate only the
+   enum. General rule: a negative-constraint test must fail for exactly ONE reason.
+
 Prior ladder history: ISS-0001 burned two attempt ladders; escalated branches
 `escalated/ISS-0001-attempt-1` / `-attempt-2` hold prior implementations.
