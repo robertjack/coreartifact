@@ -129,6 +129,65 @@
         "PreToolUse",
         "PostToolUse"
       ]
+    },
+    {
+      "scenario": "cost-headless",
+      "file": "tests/fixtures/cost-headless.jsonl",
+      "claudeCodeVersion": "2.1.211",
+      "events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUseFailure",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "SessionEnd"
+      ]
+    },
+    {
+      "scenario": "vitest",
+      "file": "tests/fixtures/vitest.jsonl",
+      "claudeCodeVersion": "2.1.211",
+      "events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "SessionEnd"
+      ]
+    },
+    {
+      "scenario": "background",
+      "file": "tests/fixtures/background.jsonl",
+      "claudeCodeVersion": "2.1.211",
+      "events": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "SessionEnd"
+      ]
     }
   ]
 }
