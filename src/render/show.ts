@@ -37,6 +37,19 @@ export function renderShowHeader(input: ShowHeaderInput): string {
   ].join("\n");
 }
 
+// ISS-0018: the minimal test-results badge — enough to satisfy "rendered in
+// show" for a claimed command. The full badge/column treatment and absent
+// markers belong to the render-depth slice that touches this file
+// downstream; this shape stays thin on purpose (a plain data bag over the
+// ledger's test_results row) so that slice amends without rework.
+export interface TestResultsBadge {
+  passed: number;
+  failed: number;
+  skipped: number;
+  failedNames: string[];
+  durationMs: number | null;
+}
+
 export type TimelineEntry =
   | { kind: "lifecycle"; seq: number; ts: string; hookEventName: string }
   | { kind: "prompt"; seq: number; ts: string; text: string }
@@ -47,6 +60,11 @@ export type TimelineEntry =
       command: string | null;
       outcome: Outcome;
       durationMs: number | null;
+      // Absent (undefined) or null when no parser claimed this command
+      // (facet absent, or the caller predates this facet) — see schema.md
+      // degradation law. Optional so this addition stays source-compatible
+      // with any existing caller that does not yet supply it.
+      testResults?: TestResultsBadge | null;
     }
   | {
       kind: "subagent";
@@ -68,6 +86,20 @@ function renderOutcome(outcome: Outcome): string {
   }
 }
 
+// Minimal badge line for a claimed command: counts, failed names, duration
+// (spec "Render" — the full badge/column treatment lands in the render-depth
+// slice). Nothing is rendered when no parser claimed the command.
+function renderTestResultsBadge(testResults: TestResultsBadge): string {
+  const namesText =
+    testResults.failedNames.length > 0 ? `  failed: [${testResults.failedNames.join(", ")}]` : "";
+  const durationText = testResults.durationMs !== null ? `${testResults.durationMs}ms` : ABSENT_MARKER;
+  return (
+    `  tests: ${testResults.passed} passed, ${testResults.failed} failed, ${testResults.skipped} skipped` +
+    namesText +
+    `  test_duration: ${durationText}`
+  );
+}
+
 function renderEntry(entry: TimelineEntry): string {
   const prefix = `[${entry.seq}] ${entry.ts}`;
   switch (entry.kind) {
@@ -78,10 +110,12 @@ function renderEntry(entry: TimelineEntry): string {
     case "command": {
       const commandText = entry.command !== null ? entry.command : ABSENT_MARKER;
       const durationText = entry.durationMs !== null ? `${entry.durationMs}ms` : ABSENT_MARKER;
+      const badge = entry.testResults != null ? renderTestResultsBadge(entry.testResults) : "";
       return (
         `${prefix}  command: ${commandText}` +
         `  outcome: ${renderOutcome(entry.outcome)}` +
-        `  duration: ${durationText}`
+        `  duration: ${durationText}` +
+        badge
       );
     }
     case "subagent":

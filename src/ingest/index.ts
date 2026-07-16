@@ -18,6 +18,7 @@ import { deriveFootprintPaths, type FootprintCandidateEvent } from "./footprint.
 import { foldSessionFacets, type FoldableEvent } from "./sessionAggregate.js";
 import { classifySessionKind, type DriftEvent } from "./drift.js";
 import { setAbsence, clearAbsence } from "../core/absence.js";
+import { extractCommandOutput, claimTestResults } from "./testResults.js";
 
 const openSync = openSyncFn as (path: string, flags: string) => number;
 const fstatSync = fstatSyncFn as (fd: number) => { size: number };
@@ -463,6 +464,49 @@ async function runIngestBody(
         deleteFootprintStmt.run(sessionId);
         for (const path of deriveFootprintPaths(candidates)) {
           insertFootprintStmt.run(sessionId, path);
+        }
+      }
+
+      // test_results: the parser-derived test facet (docs/issues/ISS-0018.md).
+      // Recomputed per touched session's command events, keyed on the
+      // command event's own line_no (identity), ON CONFLICT DO NOTHING so a
+      // re-ingest (or a delete-ledger rebuild) never re-derives a row that
+      // already exists — deterministic recompute, no row-count drift.
+      const testResultEventsStmt = handle.db.prepare(
+        "SELECT line_no, hook_event_name, payload FROM events WHERE session_id = ?",
+      );
+      const insertTestResultStmt = handle.db.prepare(
+        `INSERT INTO test_results (line_no, session_id, parser, passed, failed, skipped, duration_ms, failed_names)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(line_no) DO NOTHING`,
+      );
+      for (const sessionId of touchedSessionIds) {
+        const rows = testResultEventsStmt.all(sessionId) as {
+          line_no: number;
+          hook_event_name: string;
+          payload: string;
+        }[];
+        for (const row of rows) {
+          let payload: Record<string, unknown>;
+          try {
+            payload = JSON.parse(row.payload) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+          const output = extractCommandOutput(row.hook_event_name, payload);
+          if (output === null) continue;
+          const claim = claimTestResults(output);
+          if (claim === null) continue;
+          insertTestResultStmt.run(
+            row.line_no,
+            sessionId,
+            claim.parser,
+            claim.result.passed,
+            claim.result.failed,
+            claim.result.skipped,
+            claim.result.durationMs,
+            JSON.stringify(claim.result.failedNames),
+          );
         }
       }
 
