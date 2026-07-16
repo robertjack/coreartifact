@@ -248,7 +248,7 @@ describe("ISS-0013 ledger schema v2", () => {
 
         expect(() => insertChecksRow({ line_no: 1, truncated: 2, session_id: null, bound_by: null })).toThrow();
         expect(() =>
-          insertChecksRow({ line_no: 2, truncated: 0, session_id: null, bound_by: "sometimes" }),
+          insertChecksRow({ line_no: 2, truncated: 0, session_id: "sess-x", bound_by: "sometimes" }), // operator amendment 2026-07-16 (review S2): session_id set so ONLY the enum CHECK can reject — the null form also violated all-or-nothing, making this row unable to isolate the enum clause
         ).toThrow();
         expect(() =>
           insertChecksRow({ line_no: 3, truncated: 0, session_id: "sess-1", bound_by: null }),
