@@ -10,7 +10,7 @@
 import { openSync as openSyncFn, fstatSync as fstatSyncFn, readSync as readSyncFn, closeSync as closeSyncFn } from "node:fs";
 import { getPaths } from "../core/paths.js";
 import { openLedger } from "../core/ledger.js";
-import { parseEnvelope, type EnvelopeGit } from "../core/envelope.js";
+import { parseSpoolLine, type EnvelopeGit, type CheckFields } from "../core/envelope.js";
 import { resolveAttribution } from "../core/attribution.js";
 import { deriveStatus } from "../core/status.js";
 import { sliceCompleteLines, assignLineOrdinals, type NodeBuffer } from "./ordinals.js";
@@ -105,6 +105,12 @@ interface ParsedNewLine {
   git?: EnvelopeGit;
 }
 
+interface ParsedCheckLine {
+  lineNo: number;
+  ts: string;
+  check: CheckFields;
+}
+
 // Runs the whole algorithm (docs/issues/ISS-0006.md "The ingest algorithm
 // (contract)") inside a single transaction: event inserts and the cursor
 // advance commit atomically, so a crash rolls back both.
@@ -129,11 +135,16 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
 
     const report: IngestReport = { eventsInserted: 0, sessionsTouched: 0, skipped: [], warnings: [] };
     const parsedLines: ParsedNewLine[] = [];
+    const parsedChecks: ParsedCheckLine[] = [];
 
     for (const { lineNo, text } of ordinals) {
-      const parsed = parseEnvelope(text);
+      const parsed = parseSpoolLine(text);
       if (!parsed.ok) {
         report.skipped.push({ lineNo, reason: parsed.reason });
+        continue;
+      }
+      if (parsed.kind === "check") {
+        parsedChecks.push({ lineNo, ts: parsed.ts, check: parsed.check });
         continue;
       }
       if (typeof parsed.event !== "object" || parsed.event === null || Array.isArray(parsed.event)) {
@@ -215,6 +226,31 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
         const bucket = newEventsBySession.get(line.sessionId) ?? [];
         bucket.push({ ts: line.ts, hookEventName: line.hookEventName, eventObj: line.eventObj, git: line.git });
         newEventsBySession.set(line.sessionId, bucket);
+      }
+
+      // Checks: the second `v: 1` spool variant (spec "Ingest routing").
+      // Every field projects verbatim from the frozen spool line, including
+      // `session_id`/`bound_by` -- ingest never re-resolves a binding
+      // `check` already decided at write time. Check lines consume line_no
+      // ordinals from the same sequence as event lines (already true above,
+      // since ordinals are assigned per physical line regardless of kind).
+      const insertCheckStmt = handle.db.prepare(
+        `INSERT INTO checks (line_no, ts, name, argv, exit_code, output, truncated, session_id, bound_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(line_no) DO NOTHING`,
+      );
+      for (const line of parsedChecks) {
+        insertCheckStmt.run(
+          line.lineNo,
+          line.ts,
+          line.check.name,
+          JSON.stringify(line.check.argv),
+          line.check.exit,
+          line.check.output,
+          line.check.truncated ? 1 : 0,
+          line.check.session_id,
+          line.check.bound_by,
+        );
       }
 
       // Sessions: an aggregate, upserted from the delta this run's new
