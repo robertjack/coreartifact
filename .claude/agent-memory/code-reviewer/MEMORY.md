@@ -2,3 +2,5 @@
 - [ISS-0015 home-override dead assertion](iss0015_home_override_dead_assertion.md) — "never touches real home" assertion is vacuous when test sets HOME and the override to the same tmpdir.
 - [ISS-0016 bytes-unchanged proxy assertion](iss0016_bytes_unchanged_proxy_assertion.md) — "all other payload bytes unchanged" guarded only by .toEqual on parsed JSON; pretty-print mutant stays green. Impl itself is byte-faithful (S2).
 - [ISS-0022 uninstall backup gaps](iss0022_uninstall_backup_gaps.md) — F102/104/105 clean; F103 gate re-opens via re-init baseline pollution (S2) + typeof-object array/null trap (S3).
+- [ISS-0017 check concurrency gaps](iss0017_check_concurrency_gaps.md) — 3-layer fix misses check's readOnly binding conn (first-creation race, S1); unit test pre-inits ledger, masking it; unbounded capture crashes >512MB (S2).
+- [ISS-0018 parser first-match](iss0018_parser_first_match.md) — vitest parser reads FIRST Tests/Duration line; embedded summary-shaped output masks real failures (S2). Both payload paths + show blast radius clean; acceptance mutations all bite.
