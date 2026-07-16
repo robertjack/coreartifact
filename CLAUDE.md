@@ -58,11 +58,14 @@ findings section and the decisions log.
   $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md) ·
   PRD-0002 evidence depth drafted (2026-07-15; $150; grill record in
   docs/prd/PRD-0002-evidence-depth/prd.md).
-- Next: `aeh plan docs/prd/PRD-0002-evidence-depth/prd.md` — the
-  recording pass is DONE (2026-07-15, findings 6–8 in
-  docs/recording-pass.md; PRD amended: cost = tokens exact + pinned
-  price table, R14 backgrounded-outcome join; tested range now
-  2.1.208–2.1.211). Roles can write `.claude/agent-memory/<own
+- Now: PRD-0002 DISPATCHED (2026-07-16) — schema v2 co-authored, plan
+  compiled (12 issues, ISS-0013–0024), plan gate APPROVED after three
+  repairs (oracle-verified price table pinned in ISS-0019; edge fixes
+  in ISS-0020/0023), budget raised to $200 at the gate (p90 ruling).
+  `aeh run PRD-0002` drives the issues serially; watch via
+  `node ~/dev/aeh/dist/index.js status` / `why PRD-0002`. Recording
+  pass findings 6–8 in docs/recording-pass.md; tested range
+  2.1.208–2.1.211. Roles can write `.claude/agent-memory/<own
   role>/**` mid-issue (aeh 704d6b5). The npm name is reserved
   (2026-07-15). Geography lives in docs/map.md.
 
