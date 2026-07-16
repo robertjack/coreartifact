@@ -18,6 +18,12 @@ export function snapshotTree(root: string): TreeSnapshot {
       if (entry.name === ".git") continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
+        // Operator amendment 2026-07-16 (review S2 #104): directories are
+        // part of the tree — a files-only snapshot let an init-created,
+        // never-removed empty `.claude/` pass the byte-identical bar
+        // invisibly. A directory entry is recorded with a sentinel so
+        // added/removed dirs surface in the diff like any file.
+        snapshot.set(`${relative(root, full)}/`, Buffer.from("<dir>"));
         walk(full);
       } else if (entry.isFile()) {
         snapshot.set(relative(root, full), readFileSync(full));
