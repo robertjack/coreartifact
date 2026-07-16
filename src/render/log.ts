@@ -12,7 +12,7 @@
 
 import type { IngestReport } from "../ingest/index.js";
 import type { WorktreeGap } from "../worktree-gap.js";
-import { ABSENT_MARKER } from "./absent.js";
+import { ABSENT_MARKER, renderCostUsd } from "./absent.js";
 
 export type SessionKindOrAbsent = "headless" | "interactive" | null;
 
@@ -24,6 +24,9 @@ export interface SessionLineInput {
   startedAt: string;
   commandCount: number;
   footprintCount: number;
+  // ISS-0019: the cost enrichment facet — NULL (ABSENT) when the transcript
+  // was unavailable/drifted or the model is unpinned, never fabricated.
+  costUsd: number | null;
 }
 
 // Short id: a prefix of the full session_id, long enough to disambiguate
@@ -42,6 +45,7 @@ export function renderSessionLine(input: SessionLineInput): string {
     input.startedAt,
     `cmds:${input.commandCount}`,
     `files:${input.footprintCount}`,
+    `cost:${renderCostUsd(input.costUsd)}`,
   ].join("  ");
 }
 

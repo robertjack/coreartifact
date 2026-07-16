@@ -19,6 +19,7 @@ import { foldSessionFacets, type FoldableEvent } from "./sessionAggregate.js";
 import { classifySessionKind, type DriftEvent } from "./drift.js";
 import { setAbsence, clearAbsence } from "../core/absence.js";
 import { extractCommandOutput, claimTestResults } from "./testResults.js";
+import { enrichFromTranscript } from "./enrichment.js";
 
 const openSync = openSyncFn as (path: string, flags: string) => number;
 const fstatSync = fstatSyncFn as (fd: number) => { size: number };
@@ -464,6 +465,59 @@ async function runIngestBody(
         deleteFootprintStmt.run(sessionId);
         for (const path of deriveFootprintPaths(candidates)) {
           insertFootprintStmt.run(sessionId, path);
+        }
+      }
+
+      // Cost enrichment (docs/issues/ISS-0019.md): the one transcript-derived
+      // facet, recomputed per touched session from the FULL events set now
+      // on disk -- same recompute-from-full-history stance as kind/footprint
+      // above, so a rebuild from spool + transcript-at-path always
+      // reproduces it, and a delete-ledger + re-ingest after the transcript
+      // appears (or the price table gains the model) retroactively regains
+      // the facet. The transcript path itself is read from the session's own
+      // recorded payload (every hook event carries `transcript_path`), never
+      // guessed or cached -- and the transcript file is opened read-only by
+      // enrichFromTranscript, never copied (law).
+      const enrichmentEventsStmt = handle.db.prepare("SELECT payload FROM events WHERE session_id = ?");
+      const updateEnrichmentStmt = handle.db.prepare(
+        `UPDATE sessions SET
+           tokens_input = ?, tokens_output = ?, tokens_cache_read = ?, tokens_cache_creation = ?,
+           cost_usd = ?, model = ?, cc_version = ?
+         WHERE session_id = ?`,
+      );
+
+      for (const sessionId of touchedSessionIds) {
+        const rows = enrichmentEventsStmt.all(sessionId) as { payload: string }[];
+        let transcriptPath: string | null = null;
+        for (const row of rows) {
+          let payload: Record<string, unknown>;
+          try {
+            payload = JSON.parse(row.payload) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+          if (typeof payload.transcript_path === "string" && payload.transcript_path.length > 0) {
+            transcriptPath = payload.transcript_path;
+            break;
+          }
+        }
+
+        const enrichment = enrichFromTranscript(transcriptPath);
+        updateEnrichmentStmt.run(
+          enrichment.tokensInput,
+          enrichment.tokensOutput,
+          enrichment.tokensCacheRead,
+          enrichment.tokensCacheCreation,
+          enrichment.costUsd,
+          enrichment.model,
+          enrichment.ccVersion,
+          sessionId,
+        );
+
+        if (enrichment.costAbsenceReason !== null) {
+          setAbsence(handle.db, sessionId, "cost", enrichment.costAbsenceReason);
+        } else {
+          clearAbsence(handle.db, sessionId, "cost");
         }
       }
 

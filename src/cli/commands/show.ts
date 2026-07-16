@@ -62,6 +62,7 @@ interface SessionRow {
   session_id: string;
   sha_before: string | null;
   sha_after: string | null;
+  cost_usd: number | null;
 }
 
 interface FootprintRow {
@@ -233,7 +234,7 @@ export async function showCommand(args: string[]): Promise<number> {
   const db = new DatabaseSync(paths.ledger, { readOnly: true });
   try {
     const sessionRow = db
-      .prepare("SELECT session_id, sha_before, sha_after FROM sessions WHERE session_id = ?")
+      .prepare("SELECT session_id, sha_before, sha_after, cost_usd FROM sessions WHERE session_id = ?")
       .get(sessionId) as SessionRow | undefined;
 
     if (!sessionRow) {
@@ -291,6 +292,7 @@ export async function showCommand(args: string[]): Promise<number> {
         shaBefore: sessionRow.sha_before,
         shaAfter: sessionRow.sha_after,
         footprint: footprintRows.map((row) => row.path),
+        costUsd: sessionRow.cost_usd,
       },
       entries,
     );
