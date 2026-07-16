@@ -1,13 +1,25 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadManifest, loadFixtureStream } from "../fixtures/loader";
+import { createHash } from "node:crypto";
+import { loadManifest, loadFixtureStream, loadTranscriptPair, loadClaudeVersionOutputShape } from "../fixtures/loader.js";
+import { replaySubstitutedTranscript } from "../fixtures/transcriptReplay.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const FIXTURES_DIR = path.resolve(__dirname, "../fixtures");
-const SCENARIOS = ["interactive", "headless", "worktree", "SIGTERM", "SIGKILL"];
+const SCENARIOS = [
+  "interactive",
+  "headless",
+  "worktree",
+  "SIGTERM",
+  "SIGKILL",
+  "cost-headless",
+  "vitest",
+  "background",
+];
 const REQUIRED_PAYLOAD_FIELDS = ["session_id", "hook_event_name", "cwd", "transcript_path"];
 
 function readJsonLines(file: string) {
@@ -18,7 +30,7 @@ function readJsonLines(file: string) {
 }
 
 describe("recording-pass fixture manifest", () => {
-  it("lists exactly the five scenarios: interactive, headless, worktree, SIGTERM, SIGKILL", () => {
+  it("lists exactly the eight scenarios: interactive, headless, worktree, SIGTERM, SIGKILL, cost-headless, vitest, background", () => {
     const manifest = loadManifest();
     const scenarios = manifest.streams.map((s) => s.scenario).sort();
     expect(scenarios).toEqual([...SCENARIOS].sort());
@@ -112,6 +124,149 @@ describe("recording-pass fixture manifest", () => {
     for (const field of REQUIRED_PAYLOAD_FIELDS) {
       expect(parsed[corruptIdx - 1].value).toHaveProperty(field);
       expect(parsed[corruptIdx + 1].value).toHaveProperty(field);
+    }
+  });
+
+  it("the corrupt-line fixture carries no manifest entry (unreachable through the loader)", () => {
+    const manifest = loadManifest();
+    const entry = manifest.streams.find((s) => s.file.endsWith("corrupt-line.jsonl"));
+    expect(entry, "corrupt-line.jsonl must not appear in the typed manifest").toBeUndefined();
+  });
+});
+
+describe("typed transcript-pair access", () => {
+  const TRANSCRIPTS_MANIFEST_PATH = path.join(REPO_ROOT, "tests/fixtures/transcripts/manifest.json");
+
+  function readRawTranscriptsManifest() {
+    return JSON.parse(fs.readFileSync(TRANSCRIPTS_MANIFEST_PATH, "utf-8"));
+  }
+
+  it("exposes the recorded claude --version output shape", () => {
+    const shape = loadClaudeVersionOutputShape();
+    expect(shape).toBe(readRawTranscriptsManifest().claudeVersionOutput);
+  });
+
+  it("exposes oracle usage (total cost + four token classes) for cost-headless, vitest and background", () => {
+    for (const scenario of ["cost-headless", "vitest", "background"]) {
+      const rawPairs = readRawTranscriptsManifest().pairs as any[];
+      const rawPair = rawPairs.find((p) => p.scenario === scenario);
+      const typedPair = loadTranscriptPair(scenario);
+
+      expect(typedPair.oracle, `"${scenario}" oracle`).toBeTruthy();
+      expect(typedPair.oracle?.total_cost_usd).toBe(rawPair.oracle.total_cost_usd);
+      expect(typedPair.oracle?.usage.input_tokens).toBe(rawPair.oracle.usage.input_tokens);
+      expect(typedPair.oracle?.usage.output_tokens).toBe(rawPair.oracle.usage.output_tokens);
+      expect(typedPair.oracle?.usage.cache_read_input_tokens).toBe(rawPair.oracle.usage.cache_read_input_tokens);
+      expect(typedPair.oracle?.usage.cache_creation_input_tokens).toBe(
+        rawPair.oracle.usage.cache_creation_input_tokens,
+      );
+
+      const streamPath = path.join(REPO_ROOT, typedPair.stream);
+      const transcriptPath = path.join(REPO_ROOT, typedPair.transcript);
+      expect(fs.existsSync(streamPath), `"${scenario}" stream file exists`).toBe(true);
+      expect(fs.existsSync(transcriptPath), `"${scenario}" transcript file exists`).toBe(true);
+    }
+  });
+
+  it("exposes a null oracle for the recovered headless and interactive pairs", () => {
+    for (const scenario of ["headless", "interactive"]) {
+      const typedPair = loadTranscriptPair(scenario);
+      expect(typedPair.oracle, `recovered "${scenario}" oracle must be null`).toBeNull();
+      const transcriptPath = path.join(REPO_ROOT, typedPair.transcript);
+      expect(fs.existsSync(transcriptPath), `recovered "${scenario}" transcript file exists`).toBe(true);
+    }
+  });
+
+  it("throws a clear error for an unknown scenario", () => {
+    expect(() => loadTranscriptPair("bogus")).toThrow(/no transcript pair/);
+  });
+});
+
+describe("transcript-substituting replay wrapper", () => {
+  const STUB_SCRIPT = `
+const fs = require('node:fs');
+const resultsFile = process.argv[2];
+const chunks = [];
+process.stdin.on('data', (c) => chunks.push(c));
+process.stdin.on('end', () => {
+  const payload = Buffer.concat(chunks);
+  fs.appendFileSync(resultsFile, JSON.stringify({ text: payload.toString('utf8') }) + '\\n');
+  process.exit(0);
+});
+`;
+
+  function sha256(filePath: string): string {
+    return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  }
+
+  it("rewrites transcript_path to a tmpdir copy, leaves every other byte unchanged, and leaves committed fixtures byte-verbatim", async () => {
+    const committedStream = path.join(REPO_ROOT, "tests/fixtures/background.jsonl");
+    const committedTranscript = path.join(REPO_ROOT, "tests/fixtures/transcripts/background.transcript.jsonl");
+
+    const streamBefore = fs.readFileSync(committedStream);
+    const transcriptBefore = fs.readFileSync(committedTranscript);
+
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "coreartifact-fixtures-transcript-replay-"));
+    const stubPath = path.join(workDir, "stub.cjs");
+    const resultsFile = path.join(workDir, "results.ndjson");
+    fs.writeFileSync(stubPath, STUB_SCRIPT);
+    fs.writeFileSync(resultsFile, "");
+
+    try {
+      const result = await replaySubstitutedTranscript("background", workDir, ["node", stubPath, resultsFile]);
+      expect(result.invocations.length).toBeGreaterThan(0);
+
+      const recorded = fs
+        .readFileSync(resultsFile, "utf-8")
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => (JSON.parse(line) as { text: string }).text);
+
+      const originalLines = readJsonLines(committedStream);
+      expect(recorded.length).toBe(originalLines.length);
+
+      for (let i = 0; i < recorded.length; i += 1) {
+        const delivered = JSON.parse(recorded[i]);
+        const original = JSON.parse(originalLines[i]);
+
+        expect(typeof delivered.transcript_path === "string" && delivered.transcript_path.startsWith(workDir)).toBe(
+          true,
+        );
+        expect(delivered.transcript_path).not.toBe(original.transcript_path);
+
+        // Operator amendment 2026-07-16 (review S2): byte-level guard —
+        // object equality let reformatting through (see the acceptance
+        // twin of this assertion for the rationale).
+        const expectedLine = originalLines[i].replace(
+          JSON.stringify(original.transcript_path),
+          JSON.stringify(delivered.transcript_path),
+        );
+        expect(recorded[i]).toBe(expectedLine);
+      }
+
+      expect(fs.existsSync(result.transcriptPath)).toBe(true);
+      expect(fs.readFileSync(result.transcriptPath).equals(transcriptBefore)).toBe(true);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+
+    expect(fs.readFileSync(committedStream).equals(streamBefore)).toBe(true);
+    expect(fs.readFileSync(committedTranscript).equals(transcriptBefore)).toBe(true);
+  });
+
+  it("supports a truncated prefix of the stream (background-outcome slice needs this)", async () => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "coreartifact-fixtures-transcript-replay-prefix-"));
+    const stubPath = path.join(workDir, "stub.cjs");
+    const resultsFile = path.join(workDir, "results.ndjson");
+    fs.writeFileSync(stubPath, STUB_SCRIPT);
+    fs.writeFileSync(resultsFile, "");
+
+    try {
+      const result = await replaySubstitutedTranscript("background", workDir, ["node", stubPath, resultsFile], 3);
+      expect(result.invocations.length).toBe(3);
+      expect(result.lines.length).toBe(3);
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
     }
   });
 });
