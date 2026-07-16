@@ -22,6 +22,35 @@ import { getPaths, REGISTRY_ROOT_ENV_VAR } from "../../../src/core/paths.js";
 import { addLedger } from "../../../src/core/registry.js";
 import { uninstallCommand } from "../../../src/cli/commands/uninstall.js";
 
+// Operator fix 2026-07-16: every in-process uninstallCommand call must run
+// with BOTH stdio streams captured — the command writes its inventory
+// directly to process.stdout, raw writes bypass vitest's console
+// interception, and aeh's red-verify parses `vitest --reporter=json`
+// stdout as JSON (the pollution broke the PRD-0002 relaunch baseline).
+async function withCapturedStdio<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; stdout: string; stderr: string }> {
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  const origOut = process.stdout.write.bind(process.stdout);
+  const origErr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = ((chunk: unknown) => {
+    stdoutChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: unknown) => {
+    stderrChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    const result = await fn();
+    return { result, stdout: stdoutChunks.join(""), stderr: stderrChunks.join("") };
+  } finally {
+    process.stdout.write = origOut;
+    process.stderr.write = origErr;
+  }
+}
+
 function fakeIO(overrides: Partial<ConsentIO> & { isTTY: boolean }): ConsentIO {
   return {
     write: () => {},
@@ -509,18 +538,9 @@ describe("cli/commands/uninstall uninstallCommand (F103: refuses loudly on a mis
     const gitignoreBefore = readFileSync(join(repoRoot, ".gitignore"), "utf8");
     const registryBefore = readFileSync(registryPath);
 
-    const stderrChunks: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = ((chunk: unknown) => {
-      stderrChunks.push(String(chunk));
-      return true;
-    }) as typeof process.stderr.write;
-    let exitCode: number;
-    try {
-      exitCode = await uninstallCommand(["--yes"]);
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    const captured = await withCapturedStdio(() => uninstallCommand(["--yes"]));
+    const exitCode: number = captured.result;
+    const stderrChunks: string[] = [captured.stderr];
 
     expect(exitCode, "uninstall must exit nonzero when the install-backup manifest is missing").not.toBe(0);
     expect(stderrChunks.join(""), "the refusal must name the missing manifest").toContain("install-backup");
@@ -607,18 +627,9 @@ describe("install/installBackup captureInstallBackup never re-captures a setting
     runRealInit(repoRoot);
 
     const settingsPath = join(repoRoot, ".claude", "settings.local.json");
-    const stderrChunks: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = ((chunk: unknown) => {
-      stderrChunks.push(String(chunk));
-      return true;
-    }) as typeof process.stderr.write;
-    let exitCode: number;
-    try {
-      exitCode = await uninstallCommand(["--yes"]);
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    const captured = await withCapturedStdio(() => uninstallCommand(["--yes"]));
+    const exitCode: number = captured.result;
+    const stderrChunks: string[] = [captured.stderr];
 
     expect(exitCode, `uninstall must succeed: ${stderrChunks.join("")}`).toBe(0);
 
@@ -694,18 +705,9 @@ describe("install/installBackup entries-shape validation rejects array/null (F10
     const settingsBefore = readFileSync(settingsPath, "utf8");
     const registryBefore = readFileSync(registryPath);
 
-    const stderrChunks: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = ((chunk: unknown) => {
-      stderrChunks.push(String(chunk));
-      return true;
-    }) as typeof process.stderr.write;
-    let exitCode: number;
-    try {
-      exitCode = await uninstallCommand(["--yes"]);
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    const captured = await withCapturedStdio(() => uninstallCommand(["--yes"]));
+    const exitCode: number = captured.result;
+    const stderrChunks: string[] = [captured.stderr];
 
     expect(exitCode, "uninstall must refuse (nonzero) against entries: []").not.toBe(0);
     expect(stderrChunks.join(""), "the refusal must name the missing manifest").toContain("install-backup");
@@ -727,7 +729,8 @@ describe("install/installBackup entries-shape validation rejects array/null (F10
     let exitCode: number | undefined;
     let threw: unknown;
     try {
-      exitCode = await uninstallCommand(["--yes"]);
+      const captured = await withCapturedStdio(() => uninstallCommand(["--yes"]));
+      exitCode = captured.result;
     } catch (err) {
       threw = err;
     }
