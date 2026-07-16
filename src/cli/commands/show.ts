@@ -27,7 +27,14 @@
 import { getPaths } from "../../core/paths.js";
 import { resolveSession } from "../../resolve-session.js";
 import { deriveCommandFacet, deriveInFlightCommandFacet, isBashToolPayload } from "../../facets/outcome.js";
-import { renderShow, renderUnknownSession, renderAmbiguousMatch, type TimelineEntry } from "../../render/show.js";
+import {
+  renderShow,
+  renderUnknownSession,
+  renderAmbiguousMatch,
+  type TimelineEntry,
+  type TestResultsBadge,
+} from "../../render/show.js";
+import type { TestResultRow } from "../../core/ledger.js";
 
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
 import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
@@ -62,6 +69,7 @@ interface FootprintRow {
 }
 
 interface EventRow {
+  line_no: number;
   seq: number;
   ts: string;
   hook_event_name: string;
@@ -69,6 +77,29 @@ interface EventRow {
   agent_type: string | null;
   tool_use_id: string | null;
   payload: string;
+}
+
+// Converts a ledger test_results row (parser-derived facet, schema.md) into
+// the renderer's minimal badge shape (src/render/show.ts) — the two shapes
+// coincide field-for-field except failed_names, which the ledger stores as
+// verbatim JSON array text.
+function toTestResultsBadge(row: TestResultRow): TestResultsBadge {
+  let failedNames: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.failed_names);
+    if (Array.isArray(parsed)) failedNames = parsed.filter((n): n is string => typeof n === "string");
+  } catch {
+    // Malformed JSON degrades to an empty list rather than throwing —
+    // same degradation stance as parsePayload above.
+    failedNames = [];
+  }
+  return {
+    passed: row.passed,
+    failed: row.failed,
+    skipped: row.skipped,
+    failedNames,
+    durationMs: row.duration_ms,
+  };
 }
 
 function parsePayload(raw: string): Record<string, unknown> {
@@ -105,7 +136,11 @@ function isFoldedBashPreToolUse(
   return toolUseId !== null && pairedPostToolUseIds.has(toolUseId);
 }
 
-function buildTimelineEntry(row: EventRow, pairedPostToolUseIds: Set<string>): TimelineEntry | null {
+function buildTimelineEntry(
+  row: EventRow,
+  pairedPostToolUseIds: Set<string>,
+  testResultsByLineNo: Map<number, TestResultsBadge>,
+): TimelineEntry | null {
   const payload = parsePayload(row.payload);
 
   if (row.hook_event_name === "UserPromptSubmit") {
@@ -141,6 +176,7 @@ function buildTimelineEntry(row: EventRow, pairedPostToolUseIds: Set<string>): T
       command: facet.command,
       outcome: facet.outcome,
       durationMs: facet.durationMs,
+      testResults: testResultsByLineNo.get(row.line_no) ?? null,
     };
   }
 
@@ -215,9 +251,20 @@ export async function showCommand(args: string[]): Promise<number> {
 
     const eventRows = db
       .prepare(
-        "SELECT seq, ts, hook_event_name, agent_id, agent_type, tool_use_id, payload FROM events WHERE session_id = ? ORDER BY seq",
+        "SELECT line_no, seq, ts, hook_event_name, agent_id, agent_type, tool_use_id, payload FROM events WHERE session_id = ? ORDER BY seq",
       )
       .all(sessionId) as EventRow[];
+
+    // test_results: the parser-derived test facet (docs/issues/ISS-0018.md),
+    // keyed on line_no — the same identity the ledger's upsert uses (a
+    // claimed command event's own line_no). No row = no parser claimed it
+    // (facet absent), never fabricated as a zero.
+    const testResultRows = db
+      .prepare("SELECT line_no, session_id, parser, passed, failed, skipped, duration_ms, failed_names FROM test_results WHERE session_id = ?")
+      .all(sessionId) as TestResultRow[];
+    const testResultsByLineNo = new Map<number, TestResultsBadge>(
+      testResultRows.map((row) => [row.line_no, toTestResultsBadge(row)]),
+    );
 
     // A Bash Pre folds only when its paired Post exists in this session;
     // an unpaired Pre is the in-flight command and renders with outcome
@@ -234,7 +281,7 @@ export async function showCommand(args: string[]): Promise<number> {
 
     const entries: TimelineEntry[] = [];
     for (const row of eventRows) {
-      const entry = buildTimelineEntry(row, pairedPostToolUseIds);
+      const entry = buildTimelineEntry(row, pairedPostToolUseIds, testResultsByLineNo);
       if (entry !== null) entries.push(entry);
     }
 
