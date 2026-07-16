@@ -535,3 +535,204 @@ describe("cli/commands/uninstall uninstallCommand (F103: refuses loudly on a mis
     expect(readFileSync(registryPath).equals(registryBefore), "the registry must not be tombstoned").toBe(true);
   });
 });
+
+// Reviewer finding F108 (round 4): the F103 recovery path -- re-running
+// `init` after `.coreartifact/` was wiped, exactly the refusal message's own
+// advice -- must not re-open F103 by capturing the ALREADY-POLLUTED settings
+// file (still carrying coreartifact's own hook entries from the lost
+// manifest's install) as though it were the clean pre-init baseline.
+// Verbatim-restoring that polluted baseline on uninstall leaves every live
+// hook entry behind, dangling at the just-deleted artifact.
+describe("install/installBackup captureInstallBackup never re-captures a settings file already carrying coreartifact's own hook entries (F108)", () => {
+  let repoRoot: string;
+  let registryRoot: string;
+  let registryPath: string;
+  let originalCwd: string;
+  let originalRegistryRootEnv: string | undefined;
+
+  beforeEach(() => {
+    repoRoot = realpathSync(mkdtempSync(join(tmpdir(), "iss22-f108-unit-")));
+    execFileSync("git", ["init", "-q"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.email", "test@coreartifact.invalid"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.name", "Coreartifact Test"], { cwd: repoRoot });
+    writeFileSync(join(repoRoot, ".gitkeep"), "");
+    execFileSync("git", ["add", "."], { cwd: repoRoot });
+    execFileSync("git", ["commit", "-q", "-m", "initial commit"], { cwd: repoRoot });
+
+    registryRoot = mkdtempSync(join(tmpdir(), "iss22-f108-unit-registry-"));
+    registryPath = join(registryRoot, "registry.jsonl");
+
+    originalCwd = process.cwd();
+    originalRegistryRootEnv = process.env[REGISTRY_ROOT_ENV_VAR];
+    process.chdir(repoRoot);
+    process.env[REGISTRY_ROOT_ENV_VAR] = registryRoot;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalRegistryRootEnv === undefined) delete process.env[REGISTRY_ROOT_ENV_VAR];
+    else process.env[REGISTRY_ROOT_ENV_VAR] = originalRegistryRootEnv;
+    rmSync(repoRoot, { recursive: true, force: true });
+    rmSync(registryRoot, { recursive: true, force: true });
+  });
+
+  function runRealInit(root: string): void {
+    const paths = getPaths(root);
+    const settingsPath = join(root, ".claude", "settings.local.json");
+    const existing = existsSync(settingsPath)
+      ? (JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>)
+      : {};
+    const merged = mergeHookConfig(existing, paths.hookArtifact, root);
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(settingsPath, `${JSON.stringify(merged, null, 2)}\n`);
+    ensureGitignoreLines(join(root, ".gitignore"), [".coreartifact/", ".claude/settings.local.json"]);
+  }
+
+  it("init -> rm -rf .coreartifact -> init -> uninstall --yes leaves ZERO coreartifact hook entries and preserves the user's own settings key", async () => {
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true });
+    writeFileSync(join(repoRoot, ".claude", "settings.local.json"), '{"customUserKey":"keep-me-untouched"}');
+
+    runRealInit(repoRoot); // first init: clean pre-init baseline captured normally
+    await addLedger(repoRoot, registryPath);
+
+    // Simulate the F103 loss: something (e.g. `git clean -fdX`) wipes the
+    // gitignored `.coreartifact/` directory, taking the install-backup
+    // manifest with it, while the live settings.local.json survives.
+    rmSync(join(repoRoot, ".coreartifact"), { recursive: true, force: true });
+    expect(existsSync(installBackupPath(repoRoot)), "test setup invariant: manifest must be gone").toBe(false);
+
+    // The refusal message's own advice: re-run init to recreate an
+    // inventory. The settings file init sees now already carries
+    // coreartifact's own hook entries from the lost first install.
+    runRealInit(repoRoot);
+
+    const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+    const stderrChunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    let exitCode: number;
+    try {
+      exitCode = await uninstallCommand(["--yes"]);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(exitCode, `uninstall must succeed: ${stderrChunks.join("")}`).toBe(0);
+
+    const finalSettings = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
+    const finalText = readFileSync(settingsPath, "utf8");
+    expect(finalText.includes("capture.mjs"), "zero coreartifact hook entries must survive uninstall").toBe(false);
+    expect((finalSettings as { customUserKey?: string }).customUserKey, "the user's own pre-init key must survive").toBe(
+      "keep-me-untouched",
+    );
+  });
+});
+
+// Reviewer finding F109 (round 4): `hasUsableInstallBackup` and
+// `readBackupFile` use `typeof entries === "object"`, which also passes for
+// `[]` and `null` -- neither is a usable entries map. An array folds to
+// "usable, empty" (uninstall proceeds destructively with zero per-path
+// entries, the F103 defect through a side door); `null` throws a raw
+// TypeError the first time anything indexes into it.
+describe("install/installBackup entries-shape validation rejects array/null (F109)", () => {
+  let repoRoot: string;
+  let registryRoot: string;
+  let registryPath: string;
+  let originalCwd: string;
+  let originalRegistryRootEnv: string | undefined;
+
+  beforeEach(() => {
+    repoRoot = realpathSync(mkdtempSync(join(tmpdir(), "iss22-f109-unit-")));
+    execFileSync("git", ["init", "-q"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.email", "test@coreartifact.invalid"], { cwd: repoRoot });
+    execFileSync("git", ["config", "user.name", "Coreartifact Test"], { cwd: repoRoot });
+    writeFileSync(join(repoRoot, ".gitkeep"), "");
+    execFileSync("git", ["add", "."], { cwd: repoRoot });
+    execFileSync("git", ["commit", "-q", "-m", "initial commit"], { cwd: repoRoot });
+
+    registryRoot = mkdtempSync(join(tmpdir(), "iss22-f109-unit-registry-"));
+    registryPath = join(registryRoot, "registry.jsonl");
+
+    originalCwd = process.cwd();
+    originalRegistryRootEnv = process.env[REGISTRY_ROOT_ENV_VAR];
+    process.chdir(repoRoot);
+    process.env[REGISTRY_ROOT_ENV_VAR] = registryRoot;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalRegistryRootEnv === undefined) delete process.env[REGISTRY_ROOT_ENV_VAR];
+    else process.env[REGISTRY_ROOT_ENV_VAR] = originalRegistryRootEnv;
+    rmSync(repoRoot, { recursive: true, force: true });
+    rmSync(registryRoot, { recursive: true, force: true });
+  });
+
+  it("hasUsableInstallBackup is false for entries: [] and entries: null", () => {
+    mkdirSync(join(repoRoot, ".coreartifact"), { recursive: true });
+    writeFileSync(installBackupPath(repoRoot), JSON.stringify({ v: 1, entries: [] }));
+    expect(hasUsableInstallBackup(repoRoot), "entries: [] must not read as usable").toBe(false);
+
+    writeFileSync(installBackupPath(repoRoot), JSON.stringify({ v: 1, entries: null }));
+    expect(hasUsableInstallBackup(repoRoot), "entries: null must not read as usable").toBe(false);
+  });
+
+  it("uninstallCommand refuses (does not proceed destructively) against entries: [], live hooks left untouched", async () => {
+    const paths = getPaths(repoRoot);
+    const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+    const merged = mergeHookConfig({}, paths.hookArtifact, repoRoot);
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true });
+    writeFileSync(settingsPath, `${JSON.stringify(merged, null, 2)}\n`);
+    ensureGitignoreLines(join(repoRoot, ".gitignore"), [".coreartifact/", ".claude/settings.local.json"]);
+    await addLedger(repoRoot, registryPath);
+
+    // Corrupt the manifest to the hostile array shape after a real install.
+    writeFileSync(installBackupPath(repoRoot), JSON.stringify({ v: 1, entries: [] }));
+
+    const settingsBefore = readFileSync(settingsPath, "utf8");
+    const registryBefore = readFileSync(registryPath);
+
+    const stderrChunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    let exitCode: number;
+    try {
+      exitCode = await uninstallCommand(["--yes"]);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(exitCode, "uninstall must refuse (nonzero) against entries: []").not.toBe(0);
+    expect(stderrChunks.join(""), "the refusal must name the missing manifest").toContain("install-backup");
+    expect(readFileSync(settingsPath, "utf8"), "live hook config must survive untouched").toBe(settingsBefore);
+    expect(readFileSync(registryPath).equals(registryBefore), "the registry must not be tombstoned").toBe(true);
+  });
+
+  it("uninstallCommand refuses cleanly (no throw) against entries: null", async () => {
+    const paths = getPaths(repoRoot);
+    const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+    const merged = mergeHookConfig({}, paths.hookArtifact, repoRoot);
+    mkdirSync(join(repoRoot, ".claude"), { recursive: true });
+    writeFileSync(settingsPath, `${JSON.stringify(merged, null, 2)}\n`);
+    ensureGitignoreLines(join(repoRoot, ".gitignore"), [".coreartifact/", ".claude/settings.local.json"]);
+    await addLedger(repoRoot, registryPath);
+
+    writeFileSync(installBackupPath(repoRoot), JSON.stringify({ v: 1, entries: null }));
+
+    let exitCode: number | undefined;
+    let threw: unknown;
+    try {
+      exitCode = await uninstallCommand(["--yes"]);
+    } catch (err) {
+      threw = err;
+    }
+
+    expect(threw, "uninstallCommand must not throw against entries: null").toBeUndefined();
+    expect(exitCode, "uninstall must refuse (nonzero) against entries: null").not.toBe(0);
+  });
+});

@@ -23,6 +23,14 @@
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { existsSync as existsSyncFn, mkdirSync as mkdirSyncFn, readFileSync as readFileSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
 import { listOtherWorktreePaths } from "./gitRepo.js";
+// referencesHookArtifact/removeHookConfig: F108 fix below needs both to
+// recognize and strip a settings file that ALREADY carries coreartifact's
+// own hook entries before recording it as a "pre-init" baseline (see
+// captureSettingsFile). Circular with hookConfig.js (which imports
+// captureInstallBackup from here) is safe: both imports are only used
+// inside function bodies invoked well after both modules finish
+// initializing, never at module-eval time.
+import { referencesHookArtifact, removeHookConfig } from "./hookConfig.js";
 
 const existsSync = existsSyncFn as (path: string) => boolean;
 const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean }) => void;
@@ -60,16 +68,22 @@ export function claudeDirBackupKey(root: string): string {
   return joinPath(root, ".claude");
 }
 
+// Reviewer finding F109: `typeof x === "object"` also passes for `[]` and
+// `null` -- neither is a usable entries MAP. `[]` folds through as
+// "usable, empty," letting uninstall proceed destructively with zero
+// per-path entries (the F103 defect through a side door, docs/gotchas.md
+// #3's typeof-object trap, cousin of this repo's registry/state folds that
+// already exclude exactly these two shapes); `null` throws a raw TypeError
+// the moment anything indexes into it.
+function isEntriesMap(value: unknown): value is Record<string, BackupEntry> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function readBackupFile(path: string): InstallBackup {
   if (!existsSync(path)) return { v: 1, entries: {} };
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      "entries" in parsed &&
-      typeof (parsed as { entries: unknown }).entries === "object"
-    ) {
+    if (parsed && typeof parsed === "object" && "entries" in parsed && isEntriesMap((parsed as { entries: unknown }).entries)) {
       return { v: 1, entries: (parsed as { entries: Record<string, BackupEntry> }).entries };
     }
   } catch {
@@ -90,6 +104,52 @@ function captureOne(backup: InstallBackup, targetPath: string): void {
   } else {
     backup.entries[targetPath] = { existed: false };
   }
+}
+
+// Reviewer finding F108: the F103 recovery path (`init` re-run after
+// `.coreartifact/` -- and with it the install-backup manifest -- was wiped
+// by something outside coreartifact, e.g. `git clean -fdX`) must never
+// capture the settings file AS FOUND when that file already carries
+// coreartifact's own hook entries from the lost prior install. Recording
+// that polluted content as the "pre-init" baseline means uninstall's
+// untouched-since-init branch later restores it verbatim, leaving every
+// live hook entry behind, dangling at the just-deleted hook artifact.
+//
+// Capture-time fix (chosen over a restore-time strip): the strip logic
+// (referencesHookArtifact / removeHookConfig) already exists and is shared
+// with uninstall's own edited-since-init path, so stripping HERE means the
+// recorded baseline is simply correct from the start -- every downstream
+// consumer of a BackupEntry (both restore branches, the inventory text)
+// keeps treating `content` as "what the user's file looked like before
+// coreartifact ever touched it," with no new "was this baseline itself
+// polluted" branch needed anywhere else.
+//
+// A settings file that is unparseable, or parses but doesn't reference the
+// hook artifact at all, is returned byte-for-byte unchanged -- only a
+// PROVEN-polluted baseline pays the re-serialization cost of losing its
+// original formatting (unavoidable: there is no "clean" byte-original left
+// to preserve once coreartifact's own entries are already mixed in).
+function stripArtifactPollutionForBaseline(raw: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw; // unparseable -- nothing safe to strip, leave as captured
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw;
+  if (!referencesHookArtifact(parsed)) return raw; // genuinely clean pre-init content
+  const stripped = removeHookConfig(parsed as Record<string, unknown>, {});
+  return `${JSON.stringify(stripped, null, 2)}\n`;
+}
+
+function captureSettingsFile(backup: InstallBackup, targetPath: string): void {
+  if (targetPath in backup.entries) return;
+  if (!existsSync(targetPath)) {
+    backup.entries[targetPath] = { existed: false };
+    return;
+  }
+  const raw = readFileSync(targetPath, "utf8");
+  backup.entries[targetPath] = { existed: true, content: stripArtifactPollutionForBaseline(raw) };
 }
 
 // Directory existence only -- no `content` (directories have none). Keyed
@@ -124,7 +184,7 @@ export function captureInstallBackup(repoRoot: string): void {
     // too, without init.ts ever passing a worktree path into this function.
     const roots = [repoRoot, ...listOtherWorktreePaths(repoRoot)];
     for (const root of roots) {
-      captureOne(backup, joinPath(root, ".claude", "settings.local.json"));
+      captureSettingsFile(backup, joinPath(root, ".claude", "settings.local.json"));
       captureOne(backup, joinPath(root, ".gitignore"));
       captureDirExistence(backup, claudeDirBackupKey(root));
     }
@@ -159,10 +219,7 @@ export function hasUsableInstallBackup(repoRoot: string): boolean {
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
     return Boolean(
-      parsed &&
-        typeof parsed === "object" &&
-        "entries" in parsed &&
-        typeof (parsed as { entries: unknown }).entries === "object",
+      parsed && typeof parsed === "object" && "entries" in parsed && isEntriesMap((parsed as { entries: unknown }).entries),
     );
   } catch {
     return false;

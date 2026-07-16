@@ -40,7 +40,7 @@ export function buildHookCommand(hookArtifactPath: string, repoRoot: string): st
 // test's own `countCoreartifactHookOccurrences` walks it — used here to
 // find and replace a coreartifact entry from a prior `init` run without
 // assuming a specific nesting for Claude Code's hooks schema.
-function referencesHookArtifact(node: unknown): boolean {
+export function referencesHookArtifact(node: unknown): boolean {
   if (node === undefined || node === null) return false;
   if (typeof node === "string") return node.includes("capture.mjs");
   if (Array.isArray(node)) return node.some(referencesHookArtifact);
