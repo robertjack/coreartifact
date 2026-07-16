@@ -1,6 +1,6 @@
 # PRD-0002 — evidence depth
 
-budget_usd: 150
+budget_usd: 200
 
 Compiled 2026-07-15 from `spec-v1.md` (binding record incl. the
 Compatibility stance and the fragile-dependency register), the PRD-0001
@@ -334,3 +334,14 @@ it only refuses a contradicted classification), and (b) no SessionStart
 captured. R7's hand-authored drift fixture is therefore the INTERACTIVE
 stream with `model` stripped — its surviving end-reason supplies the
 contradiction — not the headless one.
+
+## Amendment 3 (2026-07-16, plan gate)
+
+Gate APPROVED with three repairs on the plan branch (price table pinned
+and oracle-verified in ISS-0019; ISS-0023 gains the check/doctor test
+edges; ISS-0020 drops a false fixtures edge). Budget raised $150 → $200
+(operator ruling at the gate): the compiler predicted $138 median /
+$185 p90 and PRD-0001 consumed 99.4% of its ceiling — $200 covers p90
+with margin while the one-contract-per-issue structure holds the median
+down. Coverage walk clean: all 14 criteria single-owner; zero
+operator-lane dependencies in the DAG.
