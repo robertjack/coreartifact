@@ -37,6 +37,7 @@ import { logCommand } from "./commands/log.js";
 import { showCommand } from "./commands/show.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { sendCliPing } from "../ping/index.js";
+import { checkCommand } from "./commands/check.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -63,6 +64,11 @@ export const COMMANDS: CommandSpec[] = [
     name: "uninstall",
     summary: "Remove coreartifact from this repo (destructive; requires --yes or a TTY confirmation)",
     handler: (args) => uninstallCommand(args),
+  },
+  {
+    name: "check",
+    summary: "Run a named command and record it as spool-borne evidence",
+    handler: (args) => checkCommand(args),
   },
 ];
 

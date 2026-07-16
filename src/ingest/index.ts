@@ -9,8 +9,8 @@
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { openSync as openSyncFn, fstatSync as fstatSyncFn, readSync as readSyncFn, closeSync as closeSyncFn } from "node:fs";
 import { getPaths } from "../core/paths.js";
-import { openLedger } from "../core/ledger.js";
-import { parseEnvelope, type EnvelopeGit } from "../core/envelope.js";
+import { openLedger, LedgerPathIsDirectoryError, type LedgerHandle } from "../core/ledger.js";
+import { parseSpoolLine, type EnvelopeGit, type CheckFields } from "../core/envelope.js";
 import { resolveAttribution } from "../core/attribution.js";
 import { deriveStatus } from "../core/status.js";
 import { sliceCompleteLines, assignLineOrdinals, type NodeBuffer } from "./ordinals.js";
@@ -31,6 +31,85 @@ const readSync = readSyncFn as (
 const closeSync = closeSyncFn as (fd: number) => void;
 // Buffer.alloc — a global; re-typed to the NodeBuffer surface this module uses.
 declare const Buffer: { alloc(size: number): NodeBuffer };
+// setTimeout — a global; used only by openLedgerWithRetry's backoff below.
+declare function setTimeout(callback: () => void, ms: number): unknown;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+// Proven by execution (F119, ISS-0017 round-2 review): openLedger's own
+// rebuild-trigger probe (core/ledger.ts's needsRebuild) can misjudge a
+// ledger file a CONCURRENT process is still in the middle of first-ever
+// creating -- a brand-new file legitimately has zero tables for the instant
+// before its creator's `db.exec(SCHEMA_SQL)` lands, and a second process's
+// probe reads that instant as "wrong schema" and deletes the file out from
+// under the still-writing creator. The creator then fails, and the exact
+// SQLite error text observed by execution varied by timing across repeated
+// runs -- "database is locked", "attempt to write a readonly database",
+// "disk I/O error" -- all the same underlying race (the file disappeared
+// mid-write), just different points where SQLite's C layer notices. This
+// file owns no part of core/ledger.ts (out of footprint) -- fixing the race
+// at its source is a separate slice's job; here, ingest retries the WHOLE
+// openLedger call with backoff instead, which needs no ledger-side change:
+// on retry, the winning process's file is either fully created (existsSync
+// + correct schema, an ordinary open) or fully absent again (this call
+// becomes the creator). Enumerating every SQLite error string this race can
+// surface is a losing game (proven by execution: the list above grew every
+// time this was measured) -- so every openLedger failure is retried EXCEPT
+// the one genuinely definitive, non-racy verdict openLedger can return:
+// the ledger path is a directory, not a database file. A fleet's worth of
+// concurrent first-time `check`/`log` runs is the exact workload this
+// exists to serialize instead of crash on.
+function isRetryableLedgerOpenError(err: unknown): boolean {
+  return !(err instanceof LedgerPathIsDirectoryError);
+}
+
+// F124 (ISS-0017 round-4 review, proven by execution): the race described
+// above is NOT confined to openLedger()'s own internal window. Measured on
+// a fresh repo with 10 concurrent first-ever `check` processes: even after
+// wrapping ONLY the `openLedger(dbPath)` call in retry (this function's
+// prior shape), a process could still see openLedger() itself RETURN a
+// valid-looking handle and then hit "attempt to write a readonly database"
+// later, mid-transaction (BEGIN IMMEDIATE or a subsequent insert) -- a
+// concurrent SIBLING's own needsRebuild probe can still misjudge and delete
+// the file in the wider window between one process's successful open and
+// its transaction actually committing, not only during creation itself.
+// So the unit that gets retried is the WHOLE open-then-run sequence, using
+// a FRESH connection each attempt (the stale one is closed first) -- same
+// idempotency argument as before: retrying is always safe because
+// runIngestBody re-reads ingested_bytes/lines_seen fresh from whatever
+// handle it's given, and openLedger's own rebuild-vs-open logic decides
+// from scratch whether the retried attempt is an ordinary open or a
+// re-creation.
+async function withLedgerRetry<T>(dbPath: string, run: (handle: LedgerHandle) => Promise<T>): Promise<T> {
+  const MAX_ATTEMPTS = 40;
+  const RETRY_DELAY_MS = 25;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let handle: LedgerHandle | undefined;
+    try {
+      handle = openLedger(dbPath);
+      return await run(handle);
+    } catch (err) {
+      if (!isRetryableLedgerOpenError(err)) throw err;
+      lastErr = err;
+      await delay(RETRY_DELAY_MS);
+    } finally {
+      // The failed attempt's connection (if it got that far) is never
+      // reused across a retry -- a fresh openLedger() call next attempt
+      // re-derives the real on-disk state instead of trusting a handle
+      // that may be pointed at a file a sibling process just deleted.
+      try {
+        handle?.close();
+      } catch {
+        // Closing an already-broken connection can itself throw; the
+        // retryable error above is what matters, not this cleanup.
+      }
+    }
+  }
+  throw lastErr;
+}
 
 export interface SkippedLine {
   lineNo: number;
@@ -107,15 +186,37 @@ interface ParsedNewLine {
   git?: EnvelopeGit;
 }
 
+interface ParsedCheckLine {
+  lineNo: number;
+  ts: string;
+  check: CheckFields;
+}
+
+// The open-session identity set (F124, ISS-0017 round-4 review): resolved by
+// `check`'s binding step. Deliberately just session_id + status -- the
+// smallest projection binding needs, read from the SAME connection ingest
+// already opened, never a second one.
+export interface SessionIdentityRow {
+  session_id: string;
+  status: string;
+}
+
 // Runs the whole algorithm (docs/issues/ISS-0006.md "The ingest algorithm
 // (contract)") inside a single transaction: event inserts and the cursor
-// advance commit atomically, so a crash rolls back both.
-export async function ingest(repoRoot: string, options: IngestOptions = {}): Promise<IngestReport> {
+// advance commit atomically, so a crash rolls back both. `handle` is already
+// open on entry and is never closed here -- the caller owns the connection
+// lifetime (see `ingest` and `ingestAndResolveSessions` below, the two
+// exported entry points that each open exactly one connection for their
+// whole lazy-ingest-then-read sequence).
+async function runIngestBody(
+  repoRoot: string,
+  options: IngestOptions,
+  handle: LedgerHandle,
+): Promise<IngestReport> {
   const now = options.now ?? (() => new Date().toISOString());
   const paths = getPaths(repoRoot);
-  const handle = openLedger(paths.ledger);
 
-  try {
+  {
     const meta = handle.db.prepare("SELECT ingested_bytes, lines_seen FROM meta WHERE id = 1").get() as {
       ingested_bytes: number;
       lines_seen: number;
@@ -131,11 +232,16 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
 
     const report: IngestReport = { eventsInserted: 0, sessionsTouched: 0, skipped: [], warnings: [] };
     const parsedLines: ParsedNewLine[] = [];
+    const parsedChecks: ParsedCheckLine[] = [];
 
     for (const { lineNo, text } of ordinals) {
-      const parsed = parseEnvelope(text);
+      const parsed = parseSpoolLine(text);
       if (!parsed.ok) {
         report.skipped.push({ lineNo, reason: parsed.reason });
+        continue;
+      }
+      if (parsed.kind === "check") {
+        parsedChecks.push({ lineNo, ts: parsed.ts, check: parsed.check });
         continue;
       }
       if (typeof parsed.event !== "object" || parsed.event === null || Array.isArray(parsed.event)) {
@@ -188,7 +294,16 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
       attributionBySession.set(sessionId, await resolveAttribution(cwd, repoRoot));
     }
 
-    handle.db.exec("BEGIN");
+    // BEGIN IMMEDIATE, not plain BEGIN (DEFERRED): a DEFERRED transaction
+    // starts as a reader and only takes the write lock on its first write,
+    // and SQLite returns SQLITE_BUSY on THAT upgrade WITHOUT ever invoking
+    // the busy handler -- so openLedger's busy_timeout (see core/ledger.ts)
+    // never applies and concurrent ingests die "database is locked" instead
+    // of serializing. IMMEDIATE takes the write lock at transaction start,
+    // where busy_timeout DOES apply (F119, ISS-0017 round-2 review; the
+    // reviewer's executed repro was 10 concurrent `check` processes against
+    // one repo, 4/10 crashed under plain BEGIN).
+    handle.db.exec("BEGIN IMMEDIATE");
     try {
       const insertEventStmt = handle.db.prepare(
         `INSERT INTO events (line_no, session_id, seq, ts, hook_event_name, prompt_id, agent_id, agent_type, tool_use_id, payload)
@@ -217,6 +332,31 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
         const bucket = newEventsBySession.get(line.sessionId) ?? [];
         bucket.push({ ts: line.ts, hookEventName: line.hookEventName, eventObj: line.eventObj, git: line.git });
         newEventsBySession.set(line.sessionId, bucket);
+      }
+
+      // Checks: the second `v: 1` spool variant (spec "Ingest routing").
+      // Every field projects verbatim from the frozen spool line, including
+      // `session_id`/`bound_by` -- ingest never re-resolves a binding
+      // `check` already decided at write time. Check lines consume line_no
+      // ordinals from the same sequence as event lines (already true above,
+      // since ordinals are assigned per physical line regardless of kind).
+      const insertCheckStmt = handle.db.prepare(
+        `INSERT INTO checks (line_no, ts, name, argv, exit_code, output, truncated, session_id, bound_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(line_no) DO NOTHING`,
+      );
+      for (const line of parsedChecks) {
+        insertCheckStmt.run(
+          line.lineNo,
+          line.ts,
+          line.check.name,
+          JSON.stringify(line.check.argv),
+          line.check.exit,
+          line.check.output,
+          line.check.truncated ? 1 : 0,
+          line.check.session_id,
+          line.check.bound_by,
+        );
       }
 
       // Sessions: an aggregate, upserted from the delta this run's new
@@ -368,7 +508,34 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
     }
 
     return report;
-  } finally {
-    handle.close();
   }
+}
+
+// Lazy-ingest entry point for a plain read (`log`'s current shape): the
+// whole open-then-run sequence retries as one unit (see withLedgerRetry).
+export async function ingest(repoRoot: string, options: IngestOptions = {}): Promise<IngestReport> {
+  const paths = getPaths(repoRoot);
+  return withLedgerRetry(paths.ledger, (handle) => runIngestBody(repoRoot, options, handle));
+}
+
+// Lazy-ingest entry point for `check`'s binding step (F124, ISS-0017
+// round-4 review). Before this existed, `check` called `ingest` (which
+// opens-and-closes its own connection) and THEN opened a second, separate
+// readOnly connection to resolve the open-session set -- a second race
+// window against the exact first-creation race `openLedgerWithRetry` exists
+// to serialize (see the block comment above), unprotected by any retry.
+// This instead keeps ingest's own connection open just long enough to also
+// read the session identity set, so the whole lazy-ingest-then-read
+// sequence is ONE connection, ONE race window, already covered by the
+// retry loop above.
+export async function ingestAndResolveSessions(
+  repoRoot: string,
+  options: IngestOptions = {},
+): Promise<{ report: IngestReport; sessions: SessionIdentityRow[] }> {
+  const paths = getPaths(repoRoot);
+  return withLedgerRetry(paths.ledger, async (handle) => {
+    const report = await runIngestBody(repoRoot, options, handle);
+    const sessions = handle.db.prepare("SELECT session_id, status FROM sessions").all() as SessionIdentityRow[];
+    return { report, sessions };
+  });
 }
