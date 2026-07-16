@@ -318,3 +318,19 @@ findings sharpen four requirements and resolve three open risks:
   routed work, per Testing decisions.
 - Open risks 1 (transcript schema) and 3 (`claude --version`) are
   resolved by observation; risk 2 became R14 above.
+
+## Amendment 2 (2026-07-16, schema pass — see schema.md Surface 2e)
+
+**R7's drift fixture corrected (ruling: finding-4 corroboration
+accepted).** As originally written, "`model` stripped from SessionStart →
+kind ABSENT" contradicts finding 3 — `model` absent IS the fixture-verified
+headless signal — so the criterion was unfalsifiable against a headless
+stream and would have regressed every real headless session to ABSENT.
+Ruling: v1 classification stands unchanged; `kind` degrades to ABSENT in
+exactly two cases, each with its absence reason — (a) `model` absent but
+contradicted by the interactive-only end-reason `prompt_input_exit`
+(finding 4, consumed as demote-only corroboration: it never classifies,
+it only refuses a contradicted classification), and (b) no SessionStart
+captured. R7's hand-authored drift fixture is therefore the INTERACTIVE
+stream with `model` stripped — its surviving end-reason supplies the
+contradiction — not the headless one.
