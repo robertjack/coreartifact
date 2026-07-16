@@ -2,22 +2,41 @@
 //
 // Byte-identical restoration of a pre-existing settings.local.json/.gitignore
 // uses the raw pre-init backup init's `mergeHookConfig` captures
-// (src/install/installBackup.ts) and writes it back VERBATIM -- never a
-// fresh JSON.stringify/text rebuild, which would re-serialize formatting
-// this module never touched (docs/issues/ISS-0022.md, "Invariants").
+// (src/install/installBackup.ts). Two paths, decided per file by comparing
+// the file's CURRENT bytes against what init itself would have written from
+// the pre-init snapshot (applyHookConfig/computeGitignoreOutput, both pure
+// recomputations of init's own merge logic):
+//
+//   - Untouched since init (current bytes === init's own output): restore
+//     the pre-init snapshot VERBATIM -- never a fresh JSON.stringify/text
+//     rebuild, which would re-serialize formatting this module never touched
+//     (docs/issues/ISS-0022.md, "Invariants").
+//   - Edited since init (e.g. a live session granted itself permissions,
+//     appended its own gitignore line): the pre-init snapshot is stale, so
+//     restoring it verbatim would silently destroy the edit. Instead
+//     surgically strip exactly coreartifact's own entries from the CURRENT
+//     bytes (removeHookConfig/removeGitignoreLines), preserving everything
+//     else -- reviewer findings S1/S1, round 1.
+//
+// A settings/gitignore path with NO install-backup entry (never captured --
+// a worktree added after init, or a damaged/absent backup manifest) is never
+// ours to judge: left untouched entirely, never deleted, never restored
+// (docs/gotchas.md #5 -- fail toward "we don't know", never destructive).
 //
 // @types/node is unreachable in this sandbox (no network, nothing cached --
 // see src/core/paths.ts) -- every node:fs import below is `@ts-ignore`d at
 // the import site and re-typed through a local interface.
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
-import { existsSync as existsSyncFn, rmSync as rmSyncFn, unlinkSync as unlinkSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
+import { existsSync as existsSyncFn, readFileSync as readFileSyncFn, rmSync as rmSyncFn, unlinkSync as unlinkSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
 // @ts-ignore -- node:readline/promises has no ambient types available in this sandbox
 import { createInterface as createInterfaceFn } from "node:readline/promises";
 import { getPaths, type Paths } from "../core/paths.js";
 import { removeLedger } from "../core/registry.js";
 import { listOtherWorktreePaths } from "./gitRepo.js";
-import { readInstallBackup, type InstallBackup } from "./installBackup.js";
+import { readInstallBackup, type InstallBackup, type BackupEntry } from "./installBackup.js";
+import { applyHookConfig, removeHookConfig } from "./hookConfig.js";
+import { COREARTIFACT_GITIGNORE_LINES, computeGitignoreOutput, removeGitignoreLines } from "./gitignore.js";
 
 declare const process: {
   stdin: { isTTY?: boolean };
@@ -25,6 +44,7 @@ declare const process: {
 };
 
 const existsSync = existsSyncFn as (path: string) => boolean;
+const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => string;
 const rmSync = rmSyncFn as (path: string, options?: { recursive?: boolean; force?: boolean }) => void;
 const unlinkSync = unlinkSyncFn as (path: string) => void;
 const writeFileSync = writeFileSyncFn as (path: string, data: string) => void;
@@ -74,9 +94,10 @@ export function computePlan(repoRoot: string): UninstallPlan {
 
 function describeRestore(backup: InstallBackup, path: string): string {
   const entry = backup.entries[path];
-  return entry?.existed
-    ? "restore its pre-init content exactly"
-    : "remove entirely (init created it from scratch)";
+  if (!entry) return "not touched by init -- left as-is";
+  return entry.existed
+    ? "invert init's merge (restore pre-init content, or strip init's entries if edited since)"
+    : "invert init's merge (remove entirely, or strip init's entries if edited since)";
 }
 
 export function formatInventory(plan: UninstallPlan): string {
@@ -94,21 +115,130 @@ export function formatInventory(plan: UninstallPlan): string {
   return lines.join("\n");
 }
 
-function restoreOrRemove(backup: InstallBackup, path: string): void {
-  const entry = backup.entries[path];
-  if (entry?.existed) {
-    // Verbatim: entry.content is exactly what readFileSync returned before
-    // init ever wrote here -- never re-parsed, never re-serialized.
-    writeFileSync(path, entry.content ?? "");
-  } else if (existsSync(path)) {
+function parseSettingsOrEmpty(text: string): Record<string, unknown> {
+  // Mirrors init.ts's own (unexported) readExistingSettings fold: an
+  // unparseable pre-init file was an empty merge base to init too, so
+  // recomputing "what init wrote" from the same bytes must fold the same
+  // way or the two would never agree even with zero interleaved edits.
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through to the empty base
+  }
+  return {};
+}
+
+function tryParseSettingsObject(text: string): Record<string, unknown> | undefined {
+  // Unlike parseSettingsOrEmpty above, a CURRENT file that fails to parse is
+  // never folded to `{}` -- init always writes valid JSON, so an unparseable
+  // current file means something outside coreartifact corrupted it after
+  // init ran. Overwriting or deleting it would be a guess about content we
+  // cannot read; leave it untouched instead (docs/gotchas.md #5).
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through
+  }
+  return undefined;
+}
+
+// Settings.local.json is JSON: the "untouched since init" check compares
+// against a recomputed applyHookConfig(preInitSettings, ...), and the
+// "edited since init" fallback strips via removeHookConfig, both imported
+// from hookConfig.ts so this never re-derives init's own merge rules.
+function restoreSettingsFile(
+  entry: BackupEntry | undefined,
+  path: string,
+  hookArtifactPath: string,
+  repoRoot: string,
+): void {
+  if (!entry) return; // never captured by init -- not ours to judge, leave untouched
+
+  const preInitContent = entry.existed ? (entry.content ?? "") : "";
+  const preInitSettings = parseSettingsOrEmpty(preInitContent);
+
+  if (!existsSync(path)) {
+    // Already absent. If init created the file, absence already matches the
+    // pre-init snapshot -- nothing to do. If a file existed pre-init and is
+    // now gone (removed by something other than coreartifact), byte-identity
+    // with the pre-init snapshot still requires it back.
+    if (entry.existed) writeFileSync(path, preInitContent);
+    return;
+  }
+
+  const currentContent = readFileSync(path, "utf8");
+  const expectedInitOutput = `${JSON.stringify(applyHookConfig(preInitSettings, hookArtifactPath, repoRoot), null, 2)}\n`;
+
+  if (currentContent === expectedInitOutput) {
+    // Untouched since init: safe to byte-restore the pre-init snapshot
+    // verbatim -- entry.content is exactly what readFileSync returned before
+    // init ever wrote here, never re-parsed, never re-serialized.
+    if (entry.existed) {
+      writeFileSync(path, preInitContent);
+    } else {
+      unlinkSync(path);
+    }
+    return;
+  }
+
+  // Edited since init: the pre-init snapshot is stale. Strip only
+  // coreartifact's own hook entries from the CURRENT bytes, preserving the
+  // edit (reviewer finding, round 1: blindly restoring the snapshot here
+  // destroyed post-init user/session edits).
+  const currentSettings = tryParseSettingsObject(currentContent);
+  if (currentSettings === undefined) return; // can't safely parse -- leave it alone
+
+  const stripped = removeHookConfig(currentSettings, preInitSettings);
+  if (!entry.existed && Object.keys(stripped).length === 0) {
     unlinkSync(path);
+  } else {
+    writeFileSync(path, `${JSON.stringify(stripped, null, 2)}\n`);
+  }
+}
+
+// Gitignore is line-based, not JSON: the same untouched-vs-edited split as
+// restoreSettingsFile above, via computeGitignoreOutput/removeGitignoreLines
+// (gitignore.ts) instead of the JSON hook-config helpers.
+function restoreGitignoreFile(entry: BackupEntry | undefined, path: string): void {
+  if (!entry) return; // never captured by init -- not ours to judge, leave untouched
+
+  const preInitContent = entry.existed ? (entry.content ?? "") : "";
+
+  if (!existsSync(path)) {
+    if (entry.existed) writeFileSync(path, preInitContent);
+    return;
+  }
+
+  const currentContent = readFileSync(path, "utf8");
+  const expectedInitOutput = computeGitignoreOutput(preInitContent, COREARTIFACT_GITIGNORE_LINES);
+
+  if (currentContent === expectedInitOutput) {
+    if (entry.existed) {
+      writeFileSync(path, preInitContent);
+    } else {
+      unlinkSync(path);
+    }
+    return;
+  }
+
+  const stripped = removeGitignoreLines(currentContent, COREARTIFACT_GITIGNORE_LINES);
+  if (!entry.existed && stripped === "") {
+    unlinkSync(path);
+  } else {
+    writeFileSync(path, stripped);
   }
 }
 
 export async function performUninstall(plan: UninstallPlan, registryPath?: string): Promise<void> {
   for (const target of plan.targets) {
-    restoreOrRemove(plan.backup, target.settingsPath);
-    restoreOrRemove(plan.backup, target.gitignorePath);
+    restoreSettingsFile(plan.backup.entries[target.settingsPath], target.settingsPath, plan.paths.hookArtifact, plan.repoRoot);
+    restoreGitignoreFile(plan.backup.entries[target.gitignorePath], target.gitignorePath);
   }
   // .coreartifact/ holds the hook artifact, the spool, the ledger, and the
   // install-backup manifest itself -- one removal covers all four (spec

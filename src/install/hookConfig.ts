@@ -62,19 +62,19 @@ function mergeEventEntries(existingEntries: unknown, hookCommand: string): unkno
 // passes through untouched, and within `hooks` every event key other than
 // the nine this issue owns passes through untouched too. Only the nine
 // event arrays are rewritten (coreartifact entry replaced-or-added).
-export function mergeHookConfig(
+//
+// Exported separately from mergeHookConfig (below) as the PURE half of the
+// merge, with no install-backup capture side effect -- uninstall (ISS-0022)
+// calls this directly to recompute exactly what init would have written from
+// the pre-init snapshot, to tell "untouched since init" (safe to
+// byte-restore the snapshot verbatim) apart from "edited since init" (must
+// surgically strip only coreartifact's own entries via removeHookConfig
+// below, preserving the edit).
+export function applyHookConfig(
   existingSettings: Record<string, unknown>,
   hookArtifactPath: string,
   repoRoot: string,
 ): Record<string, unknown> {
-  // ISS-0022 (uninstall): capture the pre-write originals of every
-  // settings.local.json/.gitignore init is about to touch for repoRoot,
-  // before this call's caller (init.ts) writes anything. See
-  // installBackup.ts's header for why this is the only legal hook point.
-  // No-ops (existsSync guard inside) for the fabricated, nonexistent repo
-  // roots this function's own unit tests pass.
-  captureInstallBackup(repoRoot);
-
   const hookCommand = buildHookCommand(hookArtifactPath, repoRoot);
   const existingHooksRaw = existingSettings.hooks;
   const existingHooks: Record<string, unknown> =
@@ -88,4 +88,66 @@ export function mergeHookConfig(
   }
 
   return { ...existingSettings, hooks };
+}
+
+export function mergeHookConfig(
+  existingSettings: Record<string, unknown>,
+  hookArtifactPath: string,
+  repoRoot: string,
+): Record<string, unknown> {
+  // ISS-0022 (uninstall): capture the pre-write originals of every
+  // settings.local.json/.gitignore init is about to touch for repoRoot,
+  // before this call's caller (init.ts) writes anything. See
+  // installBackup.ts's header for why this is the only legal hook point.
+  // No-ops (existsSync guard inside) for the fabricated, nonexistent repo
+  // roots this function's own unit tests pass.
+  captureInstallBackup(repoRoot);
+  return applyHookConfig(existingSettings, hookArtifactPath, repoRoot);
+}
+
+// Inverse of applyHookConfig (ISS-0022 uninstall): removes exactly the
+// coreartifact hook entries applyHookConfig would have added to
+// `currentSettings`, leaving every unrelated top-level key, event key, and
+// sibling entry on a shared event untouched -- including entries added to
+// `currentSettings` AFTER init ran (e.g. a live session granting itself
+// permissions), since this strips against CURRENT bytes, never the pre-init
+// snapshot. `preInitSettings` (the repo's settings before init ever touched
+// it, `{}` if the file did not exist) decides whether an event key that ends
+// up with zero entries is dropped entirely (it did not exist pre-init) or
+// kept as `[]` (it existed pre-init, empty or not).
+export function removeHookConfig(
+  currentSettings: Record<string, unknown>,
+  preInitSettings: Record<string, unknown>,
+): Record<string, unknown> {
+  const currentHooksRaw = currentSettings.hooks;
+  if (!currentHooksRaw || typeof currentHooksRaw !== "object" || Array.isArray(currentHooksRaw)) {
+    return currentSettings; // no hooks object -- nothing of ours could be here
+  }
+  const currentHooks = currentHooksRaw as Record<string, unknown>;
+  const preInitHooksRaw = preInitSettings.hooks;
+  const preInitHooks: Record<string, unknown> =
+    preInitHooksRaw && typeof preInitHooksRaw === "object" && !Array.isArray(preInitHooksRaw)
+      ? (preInitHooksRaw as Record<string, unknown>)
+      : {};
+
+  const hooks: Record<string, unknown> = { ...currentHooks };
+  for (const event of NINE_EVENTS) {
+    if (!(event in currentHooks)) continue;
+    const entries = currentHooks[event];
+    if (!Array.isArray(entries)) continue; // not a shape we ever wrote -- leave it alone
+    const filtered = entries.filter((entry) => !referencesHookArtifact(entry));
+    if (filtered.length === 0 && !(event in preInitHooks)) {
+      delete hooks[event];
+    } else {
+      hooks[event] = filtered;
+    }
+  }
+
+  const result: Record<string, unknown> = { ...currentSettings };
+  if (Object.keys(hooks).length === 0 && !("hooks" in preInitSettings)) {
+    delete result.hooks;
+  } else {
+    result.hooks = hooks;
+  }
+  return result;
 }
