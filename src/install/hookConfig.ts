@@ -8,6 +8,8 @@
 // agent spawn in the repo (docs/recording-pass.md FINDING 1, observed on
 // Claude Code 2.1.209) because that event is a delegation hook, not a
 // notification.
+import { captureInstallBackup } from "./installBackup.js";
+
 export const NINE_EVENTS = [
   "SessionStart",
   "UserPromptSubmit",
@@ -65,6 +67,14 @@ export function mergeHookConfig(
   hookArtifactPath: string,
   repoRoot: string,
 ): Record<string, unknown> {
+  // ISS-0022 (uninstall): capture the pre-write originals of every
+  // settings.local.json/.gitignore init is about to touch for repoRoot,
+  // before this call's caller (init.ts) writes anything. See
+  // installBackup.ts's header for why this is the only legal hook point.
+  // No-ops (existsSync guard inside) for the fabricated, nonexistent repo
+  // roots this function's own unit tests pass.
+  captureInstallBackup(repoRoot);
+
   const hookCommand = buildHookCommand(hookArtifactPath, repoRoot);
   const existingHooksRaw = existingSettings.hooks;
   const existingHooks: Record<string, unknown> =

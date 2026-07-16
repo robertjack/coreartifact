@@ -53,6 +53,22 @@ export async function addLedger(repoRoot: string, registryPath: string = getPath
   appendFileSync(registryPath, `${JSON.stringify(entry)}\n`);
 }
 
+// Mirrors addLedger exactly (ISS-0022): one atomic O_APPEND of one `remove`
+// tombstone, no read first. The append-only log is never rewritten,
+// truncated or compacted -- uninstalling a repo folds it out of readRegistry
+// (op precedence already shipped there) without touching a single prior
+// byte.
+export async function removeLedger(repoRoot: string, registryPath: string = getPaths().registry): Promise<void> {
+  mkdirSync(dirnameOf(registryPath), { recursive: true });
+  const entry: RegistryEntry = {
+    v: 1,
+    op: "remove",
+    repo_root: repoRoot,
+    at: new Date().toISOString(),
+  };
+  appendFileSync(registryPath, `${JSON.stringify(entry)}\n`);
+}
+
 // A Map is still the return type (an acceptance-test contract: readers key
 // off `instanceof Map`/`.keys()`), with the skipped-line count attached as a
 // plain property on the instance rather than wrapping it — that keeps every
