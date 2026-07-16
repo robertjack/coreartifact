@@ -13,18 +13,40 @@
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { mkdirSync as mkdirSyncFn, writeFileSync as writeFileSyncFn, readFileSync as readFileSyncFn, existsSync as existsSyncFn, copyFileSync as copyFileSyncFn } from "node:fs";
+// @ts-ignore -- node:crypto has no ambient types available in this sandbox
+import { randomUUID as randomUUIDFn } from "node:crypto";
 import { getPaths } from "../../core/paths.js";
 import { addLedger } from "../../core/registry.js";
+import { readState, appendInstall, appendConsent } from "../../core/operatorState.js";
 import { resolveRepoRoot, listOtherWorktreePaths, isTrackedByGit } from "../../install/gitRepo.js";
 import { mergeHookConfig } from "../../install/hookConfig.js";
 import { ensureGitignoreLines } from "../../install/gitignore.js";
 import { resolveHookArtifactSource } from "../../install/hookArtifactSource.js";
+import { askConsent, realConsentIO } from "../../install/consent.js";
 
 declare const process: {
   cwd(): string;
   stdout: { write(chunk: string): boolean };
   stderr: { write(chunk: string): boolean };
 };
+
+const randomUUID = randomUUIDFn as () => string;
+
+// First init on the machine (docs/issues/ISS-0023.md "Consent at init
+// (R10)"): the folded operator state has no install id yet. Generate one,
+// append it, then ask (TTY) or default-no (no TTY) and append the answer.
+// Both ops are appended exactly once, ever — a second init anywhere on the
+// same machine finds an install id already folded and does nothing here.
+async function ensureConsentAsked(): Promise<void> {
+  const state = await readState();
+  if (state.install_id !== null) return;
+
+  const installId = randomUUID();
+  await appendInstall(installId);
+
+  const consent = await askConsent(realConsentIO());
+  await appendConsent(consent);
+}
 
 const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean }) => void;
 const writeFileSync = writeFileSyncFn as (path: string, data: string) => void;
@@ -67,6 +89,10 @@ export async function initCommand(): Promise<number> {
     );
     return 1;
   }
+
+  // Machine-scoped, not repo-scoped: asked once ever, regardless of which
+  // repo's `init` happens to trigger it first (packet R10).
+  await ensureConsentAsked();
 
   const paths = getPaths(repoRoot);
   const lines: string[] = [];

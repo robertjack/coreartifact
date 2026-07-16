@@ -26,6 +26,7 @@
 // installed, unlike a `declare global` shim would.
 declare const process: {
   argv: string[];
+  env: Record<string, string | undefined>;
   exit(code?: number): never;
   stdout: { write(chunk: string): boolean };
   stderr: { write(chunk: string): boolean };
@@ -35,6 +36,7 @@ import { initCommand } from "./commands/init.js";
 import { logCommand } from "./commands/log.js";
 import { showCommand } from "./commands/show.js";
 import { uninstallCommand } from "./commands/uninstall.js";
+import { sendCliPing } from "../ping/index.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -84,5 +86,19 @@ export async function main(argv: string[]): Promise<void> {
   }
 
   const code = await command.handler(rest);
+
+  // The weekly ping rides the dispatcher path, once per invocation, for
+  // ANY command (docs/issues/ISS-0023.md "The ping (R11)") — never wired
+  // per-command, and never in the hook artifact. Fire-and-forget: nothing
+  // about this call may change the exit code or either stream above, so
+  // any unexpected failure here (not just a transport error, which
+  // sendCliPing already swallows internally) is caught and silently
+  // dropped rather than surfaced.
+  try {
+    await sendCliPing({ env: process.env });
+  } catch {
+    // never let ping plumbing change a command's outcome
+  }
+
   process.exit(code);
 }
