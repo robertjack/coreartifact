@@ -174,6 +174,122 @@ function extractTopLevelEntries(text: string): Map<string, string> | null {
   return entries;
 }
 
+// The check line (schema.md Surface 1) — the second `v: 1` spool variant,
+// written by the CLI's `check` command (never the hook artifact). Fields
+// pass through exactly as parsed: `session_id`/`bound_by` are `null` when
+// standalone, never defaulted (degradation law, docs/gotchas.md entry 5).
+export interface CheckFields {
+  name: string;
+  argv: string[];
+  exit: number;
+  output: string;
+  truncated: boolean;
+  session_id: string | null;
+  bound_by: "single-open" | "explicit" | null;
+}
+
+export type SpoolLineParseResult =
+  | { kind: "event"; ok: true; ts: string; event: unknown; eventText: string; git?: EnvelopeGit }
+  | { kind: "check"; ok: true; ts: string; check: CheckFields }
+  | { kind: "corrupt"; ok: false; reason: string };
+
+// Discriminates a physical spool line by which top-level member it carries
+// (schema.md "Ingest discrimination and the corrupt-line rule") — not by a
+// version bump. A `v: 1` line with exactly one of `event`/`check` routes to
+// the corresponding variant; not valid JSON, wrong version, neither member,
+// or both members is `corrupt` — a typed classification, never a guess.
+export function parseSpoolLine(line: string): SpoolLineParseResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return { kind: "corrupt", ok: false, reason: "line is not valid JSON" };
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { kind: "corrupt", ok: false, reason: "line is not a JSON object" };
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (obj.v !== 1) {
+    return { kind: "corrupt", ok: false, reason: "unsupported line version" };
+  }
+
+  const hasEvent = "event" in obj;
+  const hasCheck = "check" in obj;
+  if (hasEvent === hasCheck) {
+    return {
+      kind: "corrupt",
+      ok: false,
+      reason: hasEvent
+        ? "line carries both an event and a check member"
+        : "line carries neither an event nor a check member",
+    };
+  }
+
+  if (hasEvent) {
+    const parsedEnvelope = parseEnvelope(line);
+    if (!parsedEnvelope.ok) {
+      return { kind: "corrupt", ok: false, reason: parsedEnvelope.reason };
+    }
+    return {
+      kind: "event",
+      ok: true,
+      ts: parsedEnvelope.ts,
+      event: parsedEnvelope.event,
+      eventText: parsedEnvelope.eventText,
+      git: parsedEnvelope.git,
+    };
+  }
+
+  if (typeof obj.ts !== "string") {
+    return { kind: "corrupt", ok: false, reason: "line is missing a string ts" };
+  }
+
+  const rawCheck = obj.check;
+  if (typeof rawCheck !== "object" || rawCheck === null || Array.isArray(rawCheck)) {
+    return { kind: "corrupt", ok: false, reason: "check member is not an object" };
+  }
+  const c = rawCheck as Record<string, unknown>;
+
+  if (typeof c.name !== "string") {
+    return { kind: "corrupt", ok: false, reason: "check.name is not a string" };
+  }
+  if (!Array.isArray(c.argv) || !c.argv.every((a) => typeof a === "string")) {
+    return { kind: "corrupt", ok: false, reason: "check.argv is not an array of strings" };
+  }
+  if (typeof c.exit !== "number") {
+    return { kind: "corrupt", ok: false, reason: "check.exit is not a number" };
+  }
+  if (typeof c.output !== "string") {
+    return { kind: "corrupt", ok: false, reason: "check.output is not a string" };
+  }
+  if (typeof c.truncated !== "boolean") {
+    return { kind: "corrupt", ok: false, reason: "check.truncated is not a boolean" };
+  }
+  if (!(c.session_id === null || typeof c.session_id === "string")) {
+    return { kind: "corrupt", ok: false, reason: "check.session_id is not a string or null" };
+  }
+  if (!(c.bound_by === null || c.bound_by === "single-open" || c.bound_by === "explicit")) {
+    return { kind: "corrupt", ok: false, reason: "check.bound_by is not a recognized value" };
+  }
+
+  return {
+    kind: "check",
+    ok: true,
+    ts: obj.ts,
+    check: {
+      name: c.name,
+      argv: c.argv as string[],
+      exit: c.exit,
+      output: c.output,
+      truncated: c.truncated,
+      session_id: c.session_id as string | null,
+      bound_by: c.bound_by as "single-open" | "explicit" | null,
+    },
+  };
+}
+
 export function parseEnvelope(line: string): ParseEnvelopeResult {
   let parsed: unknown;
   try {
@@ -331,4 +447,76 @@ export function serializeEnvelope(input: SerializeEnvelopeInput): SerializeEnvel
   }
 
   return { ok: true, line: `{${line}}\n` };
+}
+
+export interface SerializeCheckLineInput {
+  v: 1;
+  ts: string;
+  check: {
+    name: string;
+    // Typed `unknown` at the boundary (rather than `string[]`) so a hostile
+    // caller's circular/BigInt-bearing element becomes a typed failure below
+    // instead of a compile-time lie about what serializeCheckLine accepts.
+    argv: unknown;
+    exit: unknown;
+    output: string;
+    truncated: boolean;
+    session_id: string | null;
+    bound_by: "single-open" | "explicit" | null;
+  };
+}
+
+export type SerializeCheckLineResult = { ok: true; line: string } | { ok: false; reason: string };
+
+// Serializes a check line (schema.md Surface 1). Same guarantees as
+// serializeEnvelope: exactly one physical line, JSON.stringify escapes any
+// embedded newline/control character in `output` rather than emitting it
+// raw, and hostile input (a BigInt `exit`, a circular `argv`) returns a
+// typed failure instead of throwing.
+export function serializeCheckLine(input: SerializeCheckLineInput): SerializeCheckLineResult {
+  if (input.v !== 1) {
+    return { ok: false, reason: "v must be 1" };
+  }
+  if (typeof input.ts !== "string") {
+    return { ok: false, reason: "ts must be a string" };
+  }
+  const check = input.check;
+  if (typeof check !== "object" || check === null) {
+    return { ok: false, reason: "check must be an object" };
+  }
+
+  let checkText: string;
+  try {
+    const encoded = JSON.stringify({
+      name: check.name,
+      argv: check.argv,
+      exit: check.exit,
+      output: check.output,
+      truncated: check.truncated,
+      session_id: check.session_id,
+      bound_by: check.bound_by,
+    });
+    if (encoded === undefined) {
+      return { ok: false, reason: "check is not JSON-serializable" };
+    }
+    checkText = encoded;
+  } catch (err) {
+    // Same discipline as serializeEnvelope: never interpolate the thrown
+    // value itself -- a throwing toString/Symbol.toPrimitive/message getter
+    // would re-throw out of this "never throws" function.
+    let kind = "non-Error thrown";
+    try {
+      if (err instanceof Error && typeof err.name === "string") kind = err.name;
+    } catch {
+      // a throwing `name` getter — keep the fallback
+    }
+    return { ok: false, reason: `check is not JSON-serializable (${kind})` };
+  }
+
+  const line = `{"v":1,"ts":${JSON.stringify(input.ts)},"check":${checkText}}`;
+  if (CONTROL_CHAR_RE.test(line)) {
+    return { ok: false, reason: "serialized check line unexpectedly contains a control character" };
+  }
+
+  return { ok: true, line: `${line}\n` };
 }
