@@ -17,3 +17,11 @@ script's underlying binary directly instead (`node_modules/.bin/tsc
 all work fine, and report the substitution explicitly in structured output
 rather than treating pnpm-dependent acceptance tests (e.g. ISS-0009's
 `pnpm pack` packaging test) as new failures your change caused.
+
+A fresh `~/.aeh/worktrees/coreartifact/<branch>` checkout has NO
+`node_modules` at all (git worktrees don't carry it, and pnpm can't be run
+to install one here). Since pnpm's node_modules layout is symlink-based
+against a global store, `ln -s /Users/robbiejack/dev/coreartifact/node_modules
+node_modules` inside the worktree works fine — `tsc`/`vitest` resolve
+through it correctly (confirmed ISS-0023 S2 fix, 2026-07-16). Don't `git
+add` it; it's already gitignored.

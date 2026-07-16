@@ -4,3 +4,5 @@
 - [ISS-0022 uninstall backup gaps](iss0022_uninstall_backup_gaps.md) — F102/104/105 clean; F103 gate re-opens via re-init baseline pollution (S2) + typeof-object array/null trap (S3).
 - [ISS-0017 check concurrency gaps](iss0017_check_concurrency_gaps.md) — 3-layer fix misses check's readOnly binding conn (first-creation race, S1); unit test pre-inits ledger, masking it; unbounded capture crashes >512MB (S2).
 - [ISS-0018 parser first-match](iss0018_parser_first_match.md) — vitest parser reads FIRST Tests/Duration line; embedded summary-shaped output masks real failures (S2). Both payload paths + show blast radius clean; acceptance mutations all bite.
+- [ISS-0023 ping awaited linger](iss0023_ping_awaited_linger.md) — "fire-and-forget" ping is AWAITED on CLI critical path; stalling endpoint = ~2s/command on consented machines (S2). Two-field wall + mutation resistance genuine.
+- [ISS-0019 cost enrichment](iss0019_cost_enrichment.md) — F127/F128 per-request pricing verified clean incl. cache classes; oracle numerators all integers; acceptance file has ZERO mixed coverage (only 2 new unit files, mutation-genuine); check flake didn't repro in 6 runs.
