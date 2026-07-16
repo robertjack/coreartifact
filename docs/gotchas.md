@@ -76,3 +76,22 @@ fields) are **verified by execution on the actual target**, never asserted from
 memory — memory has been wrong in both directions. `mise install node@<floor>`
 and run the real thing. This is CLAUDE.md law and it is why the campaign's worst
 bugs were caught before shipping.
+
+## 7. Locked tests that over-pin extensible surfaces detonate one campaign later (×2)
+
+An acceptance test that asserts an EXACT value where the criterion only
+needs coverage becomes a landmine for the next campaign: PRD-0001's
+ledger test pinned the literal `schema_version 1` (red the moment
+PRD-0002's sanctioned v2 bump landed) and its fixtures test pinned
+"exactly the five scenarios" via strict set equality (red the moment
+PRD-0002's routed mandate added three streams). Both implementations
+were correct; both issues escalated on locked-test collisions; both
+fixes were operator test-only amendments. **When a locked test guards a
+surface another campaign is EXPECTED to extend — version stamps,
+manifest entries, table lists, scenario sets — assert containment of
+what the criterion names, never exact equality with today's snapshot.**
+Exclusivity is only worth pinning when the spec demands it by name.
+Related: the test-author must treat module paths in the issue's
+`[files] owns` block as CONTRACT — two other escalations came from
+acceptance tests importing guessed filenames the footprint never
+granted (`checkLine.js`, `state.js`).
