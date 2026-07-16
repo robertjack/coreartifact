@@ -13,7 +13,7 @@ export async function tryImport(modulePath: string): Promise<any> {
   }
 }
 
-export const STATE_MODULE_PATH = "../../../src/core/state.js";
+export const STATE_MODULE_PATH = "../../../src/core/operatorState.js"; // operator amendment 2026-07-16 (test_dispute): the packet footprint has always said operatorState.ts; state.js was never granted
 export const PATHS_MODULE_PATH = "../../../src/core/paths.js";
 
 // Candidate names for the per-op writers described in the packet's

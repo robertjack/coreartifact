@@ -13,6 +13,12 @@ import {
   type ResolvedWriter,
 } from "./helpers.js";
 
+// Operator amendment 2026-07-16 (review-confirmed test bug): the real home
+// must be captured at module load, BEFORE any beforeEach overrides HOME —
+// os.homedir() reads process.env.HOME dynamically, so capturing it inside
+// the test body compared the tmp override against itself.
+const REAL_HOME_AT_LOAD = os.homedir();
+
 // The state module (src/core/state.ts) does not exist yet. A top-level
 // `import` of it would fail the whole file at collection, leaving every
 // criterion unmapped instead of red — load it through a caught dynamic
@@ -48,7 +54,7 @@ async function loadPathsModule(): Promise<any> {
 // cannot lose an update, so it cannot fail on the bug it exists to catch).
 const testDir = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDir, "../../..");
-const distStateUrl = url.pathToFileURL(path.join(repoRoot, "dist", "core", "state.js")).href;
+const distStateUrl = url.pathToFileURL(path.join(repoRoot, "dist", "core", "operatorState.js")).href;
 
 function buildChildScript(writer: ResolvedWriter): string {
   if (writer.kind === "per-op") {
@@ -266,10 +272,10 @@ describe("ISS-0015 operator state", () => {
     expect(paths.state).toBe(expectedStatePath);
 
     // The state path never falls back to the real, un-overridden home
-    // directory, even though this process's real os.homedir() differs from
-    // the tmp override.
-    const realHome = os.homedir();
-    expect(paths.state.startsWith(realHome)).toBe(false);
+    // directory. REAL_HOME_AT_LOAD is captured at module load, before the
+    // HOME override (operator amendment 2026-07-16 — capturing here read
+    // the override back and compared the tmp dir against itself).
+    expect(paths.state.startsWith(REAL_HOME_AT_LOAD)).toBe(false);
 
     // End-to-end: reading state through the module under the override never
     // throws and never has to fall back to the real home to resolve a path.
