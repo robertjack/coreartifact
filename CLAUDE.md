@@ -55,12 +55,15 @@ findings section and the decisions log.
 - Done: spec confirmed (2026-07-12) · hooks smoke test (2026-07-13,
   findings in spec) · scaffold + `aeh init` + `aeh upgrade` (2026-07-13) ·
   PRD-0001 walking skeleton shipped (2026-07-15; 12 issues, $149.04 of
-  $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md).
-- Next: `/aeh-prd` for PRD-0002 (checks, doctor, uninstall, cost/token
-  enrichment — walls in spec). The retro's process change is LANDED
-  (aeh 704d6b5, 2026-07-15): roles can now write `.claude/agent-memory/
-  <own role>/**` mid-issue. The npm name is reserved (2026-07-15).
-  Geography lives in docs/map.md.
+  $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md) ·
+  PRD-0002 evidence depth drafted (2026-07-15; $150; grill record in
+  docs/prd/PRD-0002-evidence-depth/prd.md).
+- Next: the PRD-0002 recording pass — operator-lane, BEFORE dispatch
+  (transcript fixtures, vitest stream, backgrounded probe,
+  `claude --version`; PRD R13) — then `aeh plan
+  docs/prd/PRD-0002-evidence-depth/prd.md`. Roles can write
+  `.claude/agent-memory/<own role>/**` mid-issue (aeh 704d6b5). The npm
+  name is reserved (2026-07-15). Geography lives in docs/map.md.
 
 ## Repo conventions
 

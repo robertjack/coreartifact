@@ -377,6 +377,10 @@ flip; operator-lane hand-work like the retro, not a dispatched campaign:
   before 1.0, issues welcome without SLA" note or issue-template config.
 - CI — the existing gates (typecheck/test/build) on GitHub Actions;
   prerequisite for npm provenance at the v1 publish.
+- The ping receiver (added 2026-07-15, PRD-0002 grill): the pinned
+  endpoint the opt-in ping POSTs to — a small worker on
+  coreartifact.com, deployed before the flip. The client ships in
+  PRD-0002 and fails silent until this exists.
 - The launch write-up walking the public history (per Launch posture).
 - The flip itself: repo public, `private: true` removed, v1 published
   over the placeholder.

@@ -52,3 +52,22 @@ and no synonyms. Created 2026-07-14 during the PRD-0001 grill.
   installs and the hook config points at; always exits 0.
 - **agent_id** — the canonical nesting key for subagent events (with
   `agent_type`); there is no `subagent_id`.
+- **check** — a named command run recorded as evidence
+  (`coreartifact check <name> -- <cmd>`); rides the spool as the second
+  envelope variant, projected at ingest like everything else. Bound by
+  the single-open-session rule (`--session` overrides; otherwise
+  standalone). Added 2026-07-15, PRD-0002 grill.
+- **absence reason** — the drift detector's ingest-time record of WHY a
+  facet is ABSENT (which source key was missing or mismatched); what
+  `doctor` reports. Rebuildable from the spool like any projection.
+- **enrichment** — the ingest-time derivation of cost/tokens from the
+  transcript at the session's stored path; fail-soft, version-pinned,
+  the only transcript-derived facet. Never on the hot path.
+- **parser** — a pure ingest-side test-output parser behind the
+  pluggable interface (`parse(command, stdout, stderr, exit)`); returns
+  null for "not mine", and null means the facet stays absent. v1 ships
+  exactly one (vitest).
+- **operator state** — the global append-only fold log under
+  `~/.coreartifact/` holding install id, consent, and last-ping time;
+  same append-and-fold pattern as the registry, no read-modify-write.
+  Per-repo uninstall never touches it.
