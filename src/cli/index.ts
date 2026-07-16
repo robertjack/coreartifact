@@ -36,7 +36,7 @@ import { initCommand } from "./commands/init.js";
 import { logCommand } from "./commands/log.js";
 import { showCommand } from "./commands/show.js";
 import { uninstallCommand } from "./commands/uninstall.js";
-import { sendCliPing } from "../ping/index.js";
+import { sendCliPing, awaitPingWithGrace, PING_EXIT_GRACE_MS } from "../ping/index.js";
 import { checkCommand } from "./commands/check.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
@@ -91,20 +91,24 @@ export async function main(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const code = await command.handler(rest);
-
   // The weekly ping rides the dispatcher path, once per invocation, for
   // ANY command (docs/issues/ISS-0023.md "The ping (R11)") — never wired
-  // per-command, and never in the hook artifact. Fire-and-forget: nothing
-  // about this call may change the exit code or either stream above, so
-  // any unexpected failure here (not just a transport error, which
-  // sendCliPing already swallows internally) is caught and silently
-  // dropped rather than surfaced.
-  try {
-    await sendCliPing({ env: process.env });
-  } catch {
+  // per-command, and never in the hook artifact. Started here, BEFORE the
+  // handler runs (not awaited after it, per the ISS-0023 S2 fix), so a
+  // healthy endpoint's round trip overlaps the command's own work and
+  // never adds latency. `.catch` is attached immediately: nothing about
+  // this call may ever surface as an unhandled rejection or change the
+  // exit code or either stream below.
+  const pingPromise = sendCliPing({ env: process.env }).catch(() => {
     // never let ping plumbing change a command's outcome
-  }
+  });
+
+  const code = await command.handler(rest);
+
+  // Bound how long the process may linger past the handler's own
+  // completion waiting on that ping: at most PING_EXIT_GRACE_MS, never the
+  // full transport bound (fix for ISS-0023 S2 — see awaitPingWithGrace).
+  await awaitPingWithGrace(pingPromise, PING_EXIT_GRACE_MS);
 
   process.exit(code);
 }
