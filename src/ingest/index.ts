@@ -16,6 +16,8 @@ import { deriveStatus } from "../core/status.js";
 import { sliceCompleteLines, assignLineOrdinals, type NodeBuffer } from "./ordinals.js";
 import { deriveFootprintPaths, type FootprintCandidateEvent } from "./footprint.js";
 import { foldSessionFacets, type FoldableEvent } from "./sessionAggregate.js";
+import { classifySessionKind, type DriftEvent } from "./drift.js";
+import { setAbsence, clearAbsence } from "../core/absence.js";
 
 const openSync = openSyncFn as (path: string, flags: string) => number;
 const fstatSync = fstatSyncFn as (fd: number) => { size: number };
@@ -268,6 +270,38 @@ export async function ingest(repoRoot: string, options: IngestOptions = {}): Pro
           sessionId,
         );
         report.sessionsTouched++;
+      }
+
+      // Drift detector (docs/issues/ISS-0020.md): recomputed per touched
+      // session from the FULL events set now on disk — the same pattern as
+      // footprint below, and for the same reason (idempotent, rebuildable
+      // from the spool). This is the authoritative kind classification;
+      // it overwrites whatever the delta-fold above set, because only a
+      // full-session view can see the SessionEnd reason needed for rule 3.
+      const kindEventsStmt = handle.db.prepare(
+        "SELECT hook_event_name, payload FROM events WHERE session_id = ?",
+      );
+      const updateKindStmt = handle.db.prepare("UPDATE sessions SET kind = ? WHERE session_id = ?");
+
+      for (const sessionId of touchedSessionIds) {
+        const rows = kindEventsStmt.all(sessionId) as { hook_event_name: string; payload: string }[];
+        const driftEvents: DriftEvent[] = rows.map((row) => {
+          let eventObj: unknown;
+          try {
+            eventObj = JSON.parse(row.payload);
+          } catch {
+            eventObj = null;
+          }
+          return { hookEventName: row.hook_event_name, eventObj };
+        });
+
+        const classification = classifySessionKind(driftEvents);
+        updateKindStmt.run(classification.kind, sessionId);
+        if (classification.kind === null) {
+          setAbsence(handle.db, sessionId, "kind", classification.reason);
+        } else {
+          clearAbsence(handle.db, sessionId, "kind");
+        }
       }
 
       // Footprint: the one materialized facet, recomputed per touched
