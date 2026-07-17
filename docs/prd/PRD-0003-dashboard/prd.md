@@ -286,3 +286,35 @@ HTTP primary + exactly one browser flow · sandbox risk → pre-dispatch
 chromium probe with pre-named operator-lane fallback · contract pass →
 api.md co-authored before decompose; no schema change permitted ·
 compile sketch confirmed as above · budget → $200.
+
+## Amendment 1 (2026-07-17, api.md pass)
+
+The data-architect pass landed `api.md` (same directory — binding: field
+names, error shapes, constants, SQL semantics; `DASHBOARD_DEFAULT_PORT`
+2278, `LATEST_SESSIONS_LIMIT` 50, timeline deliberately uncapped with a
+named re-entry). Three flags raised, ruled as follows:
+
+- **R5's busy_timeout lands in the shared read helper** — today only the
+  ingest/write path sets the pragma; `walkRegisteredRepos` and `show`'s
+  read connections do not. The amendment is made once in the shared
+  helper, not per endpoint; the decomposer routes it as an explicit
+  shared-surface change both endpoint issues depend on. It changes no
+  CLI output, so the "no `log`/`show` changes" wall stands.
+- **Ambiguous session id folds into a descriptive 404** — the same
+  fixture replayed into two repos yields one id in two ledgers;
+  `resolveSession` already knows the `ambiguous` case. No fourth status:
+  the UI's session links always carry `?repo=<root>`, and a bare
+  ambiguous `/api/session/<id>` returns `404 unknown_session` stating
+  the id does not uniquely resolve and naming the candidate roots. The
+  grill's error set (404/405/403) is unchanged.
+- **Fixture-authoring constraint (Testing decisions, inherited by every
+  seeding issue):** hand-authored streams keep `started_at`/`ts` values
+  UTC-`Z` ISO-8601 — the window predicate compares UTC-`Z` strings
+  lexicographically, and a non-`Z` offset in a seeded row would sort
+  silently wrong. The recording pass already emits `Z`; this pins the
+  hand-authored lane to the same form.
+
+One review addition at the same pass: `facets.worktree_path`
+(`string|null`, self-describing) joins the session view header — the
+attribution ruling made it a first-class session column and the viewer
+should not hide it.
