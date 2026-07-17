@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import Overview from "./views/Overview";
+import Session from "./views/Session";
 
 // Shell (plan-gate repair, 2026-07-17): this file owns the dashboard
 // chrome and a tiny client-side router with exactly two routes — the
 // overview ("/") and the session view ("/session/:id"). Each UI issue
 // owns its own view file and wires its own route here (a `touches` in
-// THEIR footprint, authorized by their dependency on this issue). The
-// session route still renders the placeholder until its issue lands.
+// THEIR footprint, authorized by their dependency on this issue).
 
 function usePathname(): string {
   const [pathname, setPathname] = useState(() => window.location.pathname);
@@ -45,7 +45,7 @@ export default function App() {
       content = <Overview />;
       break;
     case "session":
-      content = <NotYetWired label={`Session view (${matched.sessionId})`} />;
+      content = <Session sessionId={matched.sessionId!} />;
       break;
     default:
       content = <NotYetWired label="This route" />;
