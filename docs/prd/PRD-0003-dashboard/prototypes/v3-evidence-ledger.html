@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>coreartifact — the ledger (prototype V3: evidence-ledger)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#f2ede0; --paper-2:#eae3d0; --ink:#211d14; --ink-soft:#3c362a; --ink-faint:#8c8371;
+    --green:#1f5c3a; --green-bg:#e8efe4;
+    --red:#8a1f1f; --red-bg:#f3e6e3;
+    --amber:#8a5a12; --amber-bg:#f2e8d2;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; /* commit: monospace-forward throughout, terminal-native taste */
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--paper);
+    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.012) 0px, rgba(0,0,0,.012) 1px, transparent 1px, transparent 3px);
+    font-size:13.5px; line-height:1.55;
+  }
+  a{color:inherit;}
+  button{font:inherit; cursor:pointer;}
+  .muted{color:var(--ink-faint);}
+
+  .topbar{border-bottom:3px double var(--ink); padding:14px 24px 12px; display:flex; justify-content:space-between; align-items:flex-end;}
+  .brand{font-weight:700; font-size:16px; letter-spacing:.03em; text-transform:uppercase;}
+  .brand .sub{display:block; font-size:9.5px; letter-spacing:.16em; color:var(--ink-faint); font-weight:400; margin-top:3px;}
+  .tag{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-faint); border:1px solid var(--ink-faint); padding:3px 8px;}
+
+  .shell{max-width:760px; margin:0 auto; padding:26px 24px 120px;}
+
+  .claim-label{font-size:10.5px; letter-spacing:.2em; color:var(--ink-faint); text-transform:uppercase; margin-bottom:8px;}
+  .claim{font-size:22px; font-weight:700; line-height:1.35; margin-bottom:18px;}
+  .claim .n{border-bottom:2px solid var(--ink);}
+
+  .receipt-block{border:1px solid var(--ink-soft); padding:16px 20px; margin-bottom:20px; background:rgba(255,255,255,.25);}
+  .receipt-block h4{font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); margin:0 0 12px; font-weight:700;}
+  .receipt-line{display:flex; align-items:baseline; gap:4px; padding:3px 0; font-size:13px;}
+  .receipt-line .label{white-space:nowrap;}
+  .receipt-line .leader{flex:1; border-bottom:1px dotted var(--ink-faint); height:0; margin-bottom:4px;}
+  .receipt-line .value{white-space:nowrap; font-weight:700; font-variant-numeric:tabular-nums;}
+  .receipt-line.unknown .value, .receipt-line.unknown .label{color:var(--amber);}
+  .receipt-line.warn .value{color:var(--amber);}
+
+  .notice{border:1.5px solid var(--amber); background:var(--amber-bg); padding:11px 16px; margin-bottom:16px; font-size:12.5px;}
+  .notice .hdr{font-weight:700; letter-spacing:.1em; text-transform:uppercase; font-size:10.5px; color:var(--amber); margin-bottom:5px;}
+  .notice code{font-family:var(--mono); background:rgba(0,0,0,.06); padding:0 3px;}
+
+  .window-line{font-size:11px; color:var(--ink-faint); margin:-6px 0 20px;}
+
+  .perforation{border:none; border-top:2px dashed var(--ink-faint); margin:24px 0; position:relative;}
+  .perforation .scissors{position:absolute; left:0; top:-9px; background:var(--paper); padding:0 6px; font-size:11px; color:var(--ink-faint);}
+
+  /* ---------- session list (receipt line items) ---------- */
+  .list-title{font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:10px; font-weight:700;}
+  .ledger-row{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none;
+    padding:9px 4px; border-bottom:1px dashed var(--ink-faint); font-family:var(--mono); font-size:12.5px; color:var(--ink);
+  }
+  .ledger-row:hover{background:rgba(0,0,0,.035);}
+  .ledger-row:focus-visible{outline:2px solid var(--ink); outline-offset:1px;}
+  .lr-id{font-weight:700; min-width:82px;}
+  .lr-kind{min-width:78px; color:var(--ink-soft); font-size:11.5px;}
+  .lr-stamp-slot{min-width:96px;}
+  .lr-leader{flex:1; border-bottom:1px dotted var(--ink-faint); height:0; margin-bottom:4px;}
+  .lr-cost{min-width:96px; text-align:right; font-weight:700;}
+  .lr-date{min-width:110px; text-align:right; color:var(--ink-faint); font-size:11px;}
+  .cap-footer{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-faint); margin-top:10px; padding-top:8px; border-top:1px solid var(--ink-soft);}
+
+  /* ---------- stamps: verified/failing/unverified/pass/fail ---------- */
+  .stamp{
+    display:inline-block; font-weight:700; text-transform:uppercase; letter-spacing:.09em; font-size:10.5px;
+    padding:2px 9px; border:1.4px solid; outline:1px solid; outline-offset:2px; border-radius:2px; background:rgba(255,255,255,.4);
+  }
+  .stamp.verified{color:var(--green); border-color:var(--green); transform:rotate(-1.5deg);}
+  .stamp.failing{color:var(--red); border-color:var(--red); transform:rotate(1.5deg);}
+  .stamp.unverified{color:var(--ink-soft); border-color:var(--ink-faint); border-style:dashed; outline-style:dashed;}
+  .stamp.pass{color:var(--green); border-color:var(--green);}
+  .stamp.fail{color:var(--red); border-color:var(--red);}
+  .not-delegated{color:var(--ink-faint); font-size:11px; font-style:italic;}
+
+  .kind-tag{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border:1px solid var(--ink-faint); color:var(--ink-soft);}
+
+  /* ---------- ABSENT — V3 taste: a redacted ink bar; click reveals the recorded reason
+     as a torn evidence note underneath. Self-describing nullables get a plain dash,
+     never redacted, because there is nothing withheld to reveal. ---------- */
+  details.redacted{display:inline-block; vertical-align:middle;}
+  details.redacted summary{
+    list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:7px;
+    background:var(--ink); color:var(--paper); font-family:var(--mono); font-size:10px;
+    letter-spacing:.18em; text-transform:uppercase; padding:3px 10px; border-radius:1px;
+  }
+  details.redacted summary::-webkit-details-marker{display:none;}
+  details.redacted summary::before{content:"░░░";}
+  details.redacted summary::after{content:"░░░";}
+  details.redacted .reason-note{
+    margin-top:5px; font-size:11px; background:var(--paper-2); border:1px dashed var(--ink-faint);
+    padding:6px 10px; max-width:320px; color:var(--ink-soft);
+  }
+  .reason-note b{color:var(--ink);}
+  .quiet-dash{color:var(--ink-faint);}
+  .derived-mark{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); border:1px solid var(--ink-faint); padding:0 4px; margin-left:6px;}
+
+  /* ---------- session view / full receipt ---------- */
+  .back-link{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); text-decoration:none; margin-bottom:16px; letter-spacing:.04em; text-transform:uppercase;}
+  .back-link:hover{color:var(--ink);}
+  .receipt-header{border:1px solid var(--ink); padding:18px 22px; margin-bottom:0;}
+  .receipt-header .rid{font-size:14px; font-weight:700; letter-spacing:.02em; margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .fact-line{display:flex; align-items:baseline; gap:4px; padding:3px 0; font-size:12.3px;}
+  .fact-line .k{min-width:118px; color:var(--ink-faint); font-size:10.8px; text-transform:uppercase; letter-spacing:.06em;}
+  .fact-line .leader{flex:1; border-bottom:1px dotted var(--ink-faint); height:0; margin-bottom:4px;}
+  .fact-line .v{font-weight:600; text-align:right; white-space:nowrap;}
+
+  .receipt-body{border:1px solid var(--ink); border-top:none; padding:18px 22px;}
+  .section{margin-bottom:22px;}
+  .section:last-child{margin-bottom:0;}
+  .section h3{font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); margin:0 0 10px; font-weight:700;}
+  .empty-line{font-size:12px; color:var(--ink-faint); font-style:italic;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .check-line{display:flex; align-items:center; gap:8px; border:1px solid var(--ink-soft); padding:5px 10px; font-size:12px;}
+  .fp-item{font-family:var(--mono); font-size:11.3px; border-bottom:1px dotted var(--ink-faint); padding:2px 0;}
+
+  .log-row{display:grid; grid-template-columns:26px 78px 76px 1fr; gap:8px; padding:7px 0; border-bottom:1px dotted var(--ink-faint); font-size:12px; align-items:flex-start;}
+  .log-row:last-child{border-bottom:none;}
+  .log-seq{color:var(--ink-faint);}
+  .log-ts{color:var(--ink-soft);}
+  .log-kind{font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); padding-top:2px;}
+  .log-cmd{font-weight:600;}
+  .log-meta{font-size:10px; color:var(--ink-faint); margin-top:3px;}
+  .outcome-stamp{display:inline-block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:1px 7px; border:1px solid; margin-left:8px;}
+  .outcome-stamp.success{color:var(--green); border-color:var(--green);}
+  .outcome-stamp.failure{color:var(--red); border-color:var(--red);}
+  .outcome-stamp.absent{color:var(--ink-faint); border-color:var(--ink-faint); border-style:dashed;}
+  .error-block{margin-top:6px; border-left:3px solid var(--red); background:var(--red-bg); padding:6px 10px; font-size:11.5px; white-space:pre-wrap;}
+  .test-line{font-size:11px; color:var(--ink-soft); margin-top:4px;}
+
+  /* ---------- full states ---------- */
+  .full-state{padding:70px 20px; text-align:center; max-width:440px; margin:0 auto;}
+  .void-stamp{display:inline-block; border:3px solid var(--red); color:var(--red); font-size:26px; font-weight:800; letter-spacing:.12em; padding:8px 22px; transform:rotate(-6deg); margin-bottom:20px; outline:1px solid var(--red); outline-offset:4px;}
+  .full-state h2{font-size:15px; margin:0 0 8px; letter-spacing:.04em; text-transform:uppercase;}
+  .full-state p{font-size:12.5px; color:var(--ink-soft); margin:0 0 18px;}
+  .btn{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--ink); background:none; padding:7px 14px; font-size:12px; letter-spacing:.05em; text-transform:uppercase; font-weight:700;}
+  .btn:hover{background:rgba(0,0,0,.06);}
+
+  /* ---------- skeleton ---------- */
+  .skeleton{background:linear-gradient(90deg,#e5ddc9 25%,#efe9d9 37%,#e5ddc9 63%); background-size:400% 100%; animation:shimmer 1.3s ease infinite;}
+  @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
+
+  .protobar{position:fixed; bottom:0; left:0; right:0; background:var(--ink); color:var(--paper); font-size:10.5px; padding:8px 20px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; border-top:3px double #6b6250; z-index:50; font-family:var(--mono);}
+  .protobar b{color:#a89f88; letter-spacing:.1em; text-transform:uppercase; font-size:9.5px;}
+  .protobar a{color:#e9c893; text-decoration:none; white-space:nowrap;}
+  .protobar a:hover{text-decoration:underline;}
+  .protobar .sep{color:#6b6250;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">coreartifact<span class="sub">local evidence ledger</span></div>
+  <span class="tag">read-only</span>
+</div>
+
+<div id="app" class="shell"></div>
+
+<div class="protobar">
+  <b>Prototype states</b>
+  <a href="#/">Overview: loaded</a><span class="sep">·</span>
+  <a href="#/empty">Overview: empty registry</a><span class="sep">·</span>
+  <a href="#/error">Overview: error</a><span class="sep">·</span>
+  <a href="#/session/A">Session: verified (rich)</a><span class="sep">·</span>
+  <a href="#/session/B">failing</a><span class="sep">·</span>
+  <a href="#/session/C">unverified (sparse)</a><span class="sep">·</span>
+  <a href="#/session/D">interactive+drift</a><span class="sep">·</span>
+  <a href="#/session/E">unknown-kind</a><span class="sep">·</span>
+  <a href="#/session/nope">unknown id (404)</a>
+</div>
+
+<script>
+/* ============================== ICONS ============================== */
+const ICON = {
+  check: (s=12)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  x: (s=12)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+  back: (s=11)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>`,
+};
+
+/* ============================== FIXTURE DATA ============================== */
+const REPO_ROOT = "/Users/robbiejack/dev/coreartifact";
+const REPO_UNREADABLE = "/Users/robbiejack/dev/side-quest-api";
+const SID = {
+  A: "6f1a2e3c-8b4d-4a9f-9c21-7d5e6a3b1f08",
+  B: "2b7f9d0e-4c1a-4e8b-8f3d-9a6c2e5b7d14",
+  C: "d4e8a1c3-5f7b-4a2d-8e9c-1b3f6a8d2c50",
+  D: "a9c3e5f1-2d8b-4c6a-9e4f-7b1d3a5c8e92",
+  E: "5e2c8a4f-1b6d-4e9a-8c3f-2d7a9b5e1c46",
+};
+
+const OVERVIEW_LOADED = {
+  window: { start: "2026-07-10T09:12:44.000-07:00", end: "2026-07-17T09:12:44.000-07:00", days: 7 },
+  kpi: { delegated_total: 3, verified: 1, failing: 1, unverified: 1, unknown_kind: 1 },
+  tiles: {
+    spend_present_usd: 1.51345,
+    cost_absent_count: 1,
+    sessions_by_kind: { headless: 3, interactive: 1, unknown: 1 },
+    failing_checks: 1,
+  },
+  sessions: {
+    latest: [
+      { session_id: SID.A, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-17T14:32:00.000Z", classification: "verified", cost: { value: null, derived: true } },
+      { session_id: SID.B, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-17T11:05:00.000Z", classification: "failing", cost: { value: 0.812624, derived: true } },
+      { session_id: SID.C, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-16T22:47:00.000Z", classification: "unverified", cost: { value: 0.300000, derived: true } },
+      { session_id: SID.D, repo_root: REPO_ROOT, kind: "interactive", status: "closed-inferred", started_at: "2026-07-16T09:15:00.000Z", classification: null, cost: { value: 0.213326, derived: true } },
+      { session_id: SID.E, repo_root: REPO_ROOT, kind: null, status: "closed-inferred", started_at: "2026-07-15T03:40:00.000Z", classification: null, cost: { value: 0.187500, derived: true } },
+    ],
+    total: 5,
+  },
+  repos: [
+    { root: REPO_ROOT, status: "ok" },
+    { root: REPO_UNREADABLE, status: "unreadable", reason: "database disk image is malformed" },
+  ],
+  repos_skipped: 0,
+  drift: [
+    { session_id: SID.D, version: "2.1.212", range: { min: "2.1.208", max: "2.1.211" } },
+  ],
+};
+
+const OVERVIEW_EMPTY = {
+  window: { start: "2026-07-10T09:12:44.000-07:00", end: "2026-07-17T09:12:44.000-07:00", days: 7 },
+  kpi: { delegated_total: 0, verified: 0, failing: 0, unverified: 0, unknown_kind: 0 },
+  tiles: { spend_present_usd: 0, cost_absent_count: 0, sessions_by_kind: { headless: 0, interactive: 0, unknown: 0 }, failing_checks: 0 },
+  sessions: { latest: [], total: 0 },
+  repos: [],
+  repos_skipped: 0,
+  drift: [],
+};
+
+const P1 = "b6a2e9f1-4c7d-4a3e-8f1b-2d9c6a4e7b31";
+
+const SESSIONS = {
+  A: {
+    key: "A",
+    facets: {
+      session_id: SID.A, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "8f2a1c9d4e7b6a3f5c8d1e9b2a4f6c8d0e3b5a7c",
+      sha_after: "3d9e7b1c5a8f2d4e6b9c1a3f5d7e9b1c3a5d7f9b",
+      model: "claude-3-7-experimental", cc_version: "2.1.211",
+      cost: { value: null, derived: true },
+      tokens: { derived: true, input: 12400, output: 3180, cache_read: 0, cache_creation: 5120 },
+      started_at: "2026-07-17T14:32:00.000Z", last_event_at: "2026-07-17T14:39:41.900Z", ended_at: "2026-07-17T14:39:42.000Z",
+    },
+    checks: [{ name: "typecheck", exit_code: 0, passed: true, truncated: false, bound_by: "single-open" }],
+    test_results: [{ line_no: 42, parser: "vitest", passed: 18, failed: 0, skipped: 1, duration_ms: 3400, failed_names: [] }],
+    footprint: ["src/dashboard/server.ts", "src/dashboard/routes/overview.ts", "src/render/absent.ts", "tests/acceptance/dashboard.test.ts"],
+    absences: [{ facet: "cost", reason: "model unpinned: claude-3-7-experimental" }],
+    timeline: [
+      { seq: 1, ts: "2026-07-17T14:32:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-17T14:32:01.200Z", kind: "prompt", prompt: "Run typecheck and the test suite, then try reading a scratch report file that should not exist (expected to fail), and spawn a background subagent to check disk usage. Report back when done.", prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-17T14:32:05.400Z", kind: "command", command: "pnpm run typecheck", duration_ms: 1180, outcome: { state: "success" }, test_results: null, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01A8f3JxRt7Kd2m9QeZs6Vn1" },
+      { seq: 4, ts: "2026-07-17T14:33:10.800Z", kind: "command", command: "pnpm test", duration_ms: 3400, outcome: { state: "success" }, test_results: { passed: 18, failed: 0, skipped: 1, duration_ms: 3400, failed_names: [] }, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01Bz6dPqWm4Yh8Ls2NfTr9Uk" },
+      { seq: 5, ts: "2026-07-17T14:34:02.150Z", kind: "command", command: "cat /private/tmp/scratch-report.txt", duration_ms: 14, outcome: { state: "failure", error: "cat: /private/tmp/scratch-report.txt: No such file or directory" }, test_results: null, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01Cq9wXeNb3Fh7Ss1MgYp5Tz" },
+      { seq: 6, ts: "2026-07-17T14:34:20.000Z", kind: "subagent", hook_event_name: "SubagentStart", prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: null },
+      { seq: 7, ts: "2026-07-17T14:34:21.500Z", kind: "command", command: "du -sh . && sleep 90", duration_ms: null, outcome: { state: "absent" }, test_results: null, prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: "toolu_01Dr2yZfQc8Jk4Nt6VhWm3Xp" },
+      { seq: 8, ts: "2026-07-17T14:39:38.700Z", kind: "subagent", hook_event_name: "SubagentStop", prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: null },
+      { seq: 9, ts: "2026-07-17T14:39:41.900Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  B: {
+    key: "B",
+    facets: {
+      session_id: SID.B, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "1a4c8e2b5d9f3a7c6b8e0d2f4a6c8e1b3d5f7a90",
+      sha_after: "9b3d7f1a5c8e2b4d6f0a2c4e6b8d0f2a4c6e8b13",
+      model: "claude-sonnet-5", cc_version: "2.1.209",
+      cost: { value: 0.812624, derived: true },
+      tokens: { derived: true, input: 20500, output: 6120, cache_read: 1024, cache_creation: 0 },
+      started_at: "2026-07-17T11:05:00.000Z", last_event_at: "2026-07-17T11:11:52.300Z", ended_at: "2026-07-17T11:11:52.400Z",
+    },
+    checks: [{ name: "typecheck", exit_code: 1, passed: false, truncated: false, bound_by: "single-open" }],
+    test_results: [],
+    footprint: ["src/dashboard/routes/session.ts"],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-17T11:05:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-17T11:05:02.000Z", kind: "prompt", prompt: "Wire the session route and run typecheck before finishing.", prompt_id: "3f8a1d5c-9b2e-4c6a-8d4f-1a3c5e7b9d20", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-17T11:11:40.100Z", kind: "command", command: "pnpm run typecheck", duration_ms: 2200, outcome: { state: "failure", error: "src/dashboard/routes/session.ts(88,7): error TS2322: Type 'string | null' is not assignable to type 'string'." }, test_results: null, prompt_id: "3f8a1d5c-9b2e-4c6a-8d4f-1a3c5e7b9d20", agent_id: null, agent_type: null, tool_use_id: "toolu_02Ee7fRt4Nc9Xm1QpZs8Vb3Lk" },
+      { seq: 4, ts: "2026-07-17T11:11:52.300Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  C: {
+    key: "C",
+    facets: {
+      session_id: SID.C, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "c2e6a0f4b8d2a6c0e4b8d2a6c0e4b8d2a6c0e4b8",
+      sha_after: "c2e6a0f4b8d2a6c0e4b8d2a6c0e4b8d2a6c0e4b8",
+      model: "claude-sonnet-5", cc_version: "2.1.210",
+      cost: { value: 0.300000, derived: true },
+      tokens: { derived: true, input: 4200, output: 980, cache_read: 0, cache_creation: 0 },
+      started_at: "2026-07-16T22:47:00.000Z", last_event_at: "2026-07-16T22:49:03.000Z", ended_at: "2026-07-16T22:49:03.500Z",
+    },
+    checks: [],
+    test_results: [],
+    footprint: [],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-16T22:47:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-16T22:47:04.000Z", kind: "prompt", prompt: "Summarize the current state of the dashboard PRD without making changes.", prompt_id: "5c9e2a7f-1d4b-4e8c-9a3f-6b2d8e4c1a70", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-16T22:49:03.000Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  D: {
+    key: "D",
+    facets: {
+      session_id: SID.D, repo_root: REPO_ROOT, worktree_path: "/Users/robbiejack/dev/.worktrees/coreartifact-dashboard-spike",
+      status: "closed-inferred", kind: "interactive",
+      sha_before: "7a1c5e9b3d7f1a5c9e3b7d1f5a9c3e7b1d5f9a30",
+      sha_after: "4e8b2d6a0c4e8b2d6a0c4e8b2d6a0c4e8b2d6a01",
+      model: "claude-opus-4-8", cc_version: "2.1.212",
+      cost: { value: 0.213326, derived: true },
+      tokens: { derived: true, input: 9800, output: 2410, cache_read: 512, cache_creation: 0 },
+      started_at: "2026-07-16T09:15:00.000Z", last_event_at: "2026-07-16T09:52:18.000Z", ended_at: null,
+    },
+    checks: [],
+    test_results: [],
+    footprint: ["src/dashboard/components/DriftBanner.tsx", "src/dashboard/components/KpiHeadline.tsx"],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-16T09:15:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-16T09:15:03.000Z", kind: "prompt", prompt: "Let's explore three dashboard layout directions before we lock the PRD.", prompt_id: "9d3f7a1c-5e8b-4c2d-9f6a-1b4d7e2c8f50", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-16T09:52:18.000Z", kind: "command", command: "pnpm run dev", duration_ms: 850, outcome: { state: "success" }, test_results: null, prompt_id: "9d3f7a1c-5e8b-4c2d-9f6a-1b4d7e2c8f50", agent_id: null, agent_type: null, tool_use_id: "toolu_04Gh1kTr6Yb3Zp9WmSt2Vf7Nc" },
+    ],
+  },
+  E: {
+    key: "E",
+    facets: {
+      session_id: SID.E, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-inferred", kind: null,
+      sha_before: null, sha_after: null,
+      model: null, cc_version: null,
+      cost: { value: 0.187500, derived: true },
+      tokens: { derived: true, input: 3100, output: 640, cache_read: 0, cache_creation: 0 },
+      started_at: "2026-07-15T03:40:00.000Z", last_event_at: "2026-07-15T03:41:12.000Z", ended_at: null,
+    },
+    checks: [],
+    test_results: [],
+    footprint: [],
+    absences: [{ facet: "kind", reason: "no SessionStart captured" }],
+    timeline: [
+      { seq: 1, ts: "2026-07-15T03:40:00.000Z", kind: "prompt", prompt: "continue", prompt_id: "1f4a8c2e-6b9d-4a3f-8e1c-5b7d9a2f4c60", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-15T03:41:12.000Z", kind: "command", command: "echo ok", duration_ms: 40, outcome: { state: "success" }, test_results: null, prompt_id: "1f4a8c2e-6b9d-4a3f-8e1c-5b7d9a2f4c60", agent_id: null, agent_type: null, tool_use_id: "toolu_03Ff8gSt5Od0Yn2RqAt9Wc4Ml" },
+    ],
+  },
+};
+
+/* ============================== HELPERS ============================== */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtMoney(v){ return "$" + v.toFixed(2); }
+function fmtDate(iso){ const d = new Date(iso); return d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }); }
+function fmtClock(iso){ const d = new Date(iso); return d.toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit", second:"2-digit" }); }
+function fmtDur(ms){ if (ms===null||ms===undefined) return null; return ms < 1000 ? ms+"ms" : (ms/1000).toFixed(2)+"s"; }
+function shortId(id){ return id.slice(0,8); }
+function idKeyOf(sid){ return Object.keys(SID).find(k=>SID[k]===sid) || "nope"; }
+
+function classStamp(c){
+  if (c === "verified") return `<span class="stamp verified">${ICON.check(9)} verified</span>`;
+  if (c === "failing") return `<span class="stamp failing">${ICON.x(9)} failing</span>`;
+  if (c === "unverified") return `<span class="stamp unverified">unverified</span>`;
+  return `<span class="not-delegated">n/a — not delegated</span>`;
+}
+
+/* ABSENT rendering, V3 taste: a redacted ink bar (░░░ ABSENT ░░░) — the receipt's own
+   redaction mark. Click to unseal a torn "reason" note beneath, sourced verbatim from
+   `absences`. Self-describing nullables carry no reason and are never redacted — they
+   print as a plain dash, honestly. */
+function redacted(reason){
+  return `<details class="redacted"><summary>ABSENT</summary><div class="reason-note"><b>REASON —</b> ${esc(reason)}</div></details>`;
+}
+function quietDash(note){
+  return `<span class="quiet-dash">— ${note ? `<em style="font-size:11px;">${esc(note)}</em>` : ""}</span>`;
+}
+function renderCost(cost){
+  if (cost.value === null) return redacted("cost absent — see receipt below") + `<span class="derived-mark">derived</span>`;
+  return `${fmtMoney(cost.value)}<span class="derived-mark">derived</span>`;
+}
+
+const app = document.getElementById("app");
+
+/* ============================== OVERVIEW ============================== */
+function renderOverviewSkeleton(){
+  app.innerHTML = `
+    <div class="skeleton" style="width:140px;height:10px;margin-bottom:10px;"></div>
+    <div class="skeleton" style="width:100%;height:26px;margin-bottom:20px;"></div>
+    <div class="skeleton" style="width:100%;height:120px;margin-bottom:20px;"></div>
+    <div class="skeleton" style="width:100%;height:160px;"></div>
+  `;
+}
+
+function renderOverviewError(){
+  app.innerHTML = `
+    <div class="full-state">
+      <div class="void-stamp">VOID</div>
+      <h2>Ledger unreachable</h2>
+      <p>The dashboard server didn't respond — it may still be starting, or the process may have exited. Simulated failure state for review.</p>
+      <a class="btn" href="#/">${ICON.back(11)} Return to the ledger</a>
+    </div>
+  `;
+}
+
+function renderOverviewEmpty(){ renderOverviewLoaded(OVERVIEW_EMPTY, true); }
+
+function renderOverviewLoaded(data, isEmpty){
+  const { kpi, tiles, sessions, repos, repos_skipped, drift, window: win } = data;
+  const unreadable = repos.filter(r => r.status === "unreadable");
+  const readableCount = repos.length - unreadable.length;
+
+  const rowsHtml = sessions.latest.map(s => `
+    <button class="ledger-row" data-nav="#/session/${idKeyOf(s.session_id)}">
+      <span class="lr-id">${shortId(s.session_id)}</span>
+      <span class="lr-kind">${s.kind === null ? "unknown" : s.kind}</span>
+      <span class="lr-stamp-slot">${classStamp(s.classification)}</span>
+      <span class="lr-leader"></span>
+      <span class="lr-cost">${renderCost(s.cost)}</span>
+      <span class="lr-date">${fmtDate(s.started_at)}</span>
+    </button>
+  `).join("");
+
+  app.innerHTML = `
+    <div class="claim-label">Claim</div>
+    <div class="claim"><span class="n">${kpi.verified} of ${kpi.delegated_total}</span> delegated sessions came back verified.</div>
+    <div class="window-line">rolling ${win.days}-day window (local) — ${fmtDate(win.start)} through ${fmtDate(win.end)}</div>
+
+    <div class="receipt-block">
+      <h4>Proof</h4>
+      <div class="receipt-line"><span class="label">verified</span><span class="leader"></span><span class="value">${kpi.verified}</span></div>
+      <div class="receipt-line"><span class="label">failing</span><span class="leader"></span><span class="value">${kpi.failing}</span></div>
+      <div class="receipt-line"><span class="label">unverified</span><span class="leader"></span><span class="value">${kpi.unverified}</span></div>
+      ${kpi.unknown_kind > 0 ? `<div class="receipt-line unknown"><span class="label">unknown kind (excluded above)</span><span class="leader"></span><span class="value">${kpi.unknown_kind}</span></div>` : ""}
+    </div>
+
+    ${drift.length ? drift.map(d => `
+      <div class="notice">
+        <div class="hdr">⚠ Notice — drift banner</div>
+        session <code>${shortId(d.session_id)}</code> recorded Claude Code <code>${d.version}</code> — outside the tested range <code>${d.range.min}–${d.range.max}</code>.
+      </div>
+    `).join("") : ""}
+
+    ${unreadable.length ? unreadable.map(r => `
+      <div class="notice" style="border-color:var(--ink-soft); background:none;">
+        <div class="hdr" style="color:var(--ink-soft);">⚠ ${readableCount} of ${repos.length} registered repos readable</div>
+        <code>${esc(r.root)}</code> is <b>unreadable</b>: ${esc(r.reason)} — never silently skipped.
+      </div>
+    `).join("") : ""}
+
+    <div class="receipt-block">
+      <h4>Tiles</h4>
+      <div class="receipt-line ${tiles.cost_absent_count>0?'warn':''}"><span class="label">spend (sum of present)</span><span class="leader"></span><span class="value">${fmtMoney(tiles.spend_present_usd)}</span></div>
+      ${tiles.cost_absent_count>0 ? `<div class="receipt-line warn"><span class="label" style="font-size:11px;">— cost absent for ${tiles.cost_absent_count} session${tiles.cost_absent_count===1?"":"s"}, never a silent zero</span><span class="leader"></span><span class="value"></span></div>` : ""}
+      <div class="receipt-line"><span class="label">sessions — headless</span><span class="leader"></span><span class="value">${tiles.sessions_by_kind.headless}</span></div>
+      <div class="receipt-line"><span class="label">sessions — interactive</span><span class="leader"></span><span class="value">${tiles.sessions_by_kind.interactive}</span></div>
+      <div class="receipt-line"><span class="label">sessions — unknown</span><span class="leader"></span><span class="value">${tiles.sessions_by_kind.unknown}</span></div>
+      <div class="receipt-line"><span class="label">failing bound checks</span><span class="leader"></span><span class="value">${tiles.failing_checks}</span></div>
+    </div>
+
+    ${isEmpty ? `
+      <div class="full-state" style="padding-top:40px;">
+        <div style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);border:1px dashed var(--ink-faint);display:inline-block;padding:10px 20px;margin-bottom:16px;">no entries</div>
+        <h2>No registered repos</h2>
+        <p>Run <code>coreartifact init</code> in a repo to register its ledger. Zero repos still prints an honest zero-of-zero claim above — never a blank page.</p>
+      </div>
+    ` : `
+      <div class="perforation"><span class="scissors">✂</span></div>
+      <div class="list-title">Sessions ledger</div>
+      <div>${rowsHtml}</div>
+      <div class="cap-footer">
+        <span>showing latest ${sessions.latest.length} of ${sessions.total}</span>
+        <span>${repos_skipped>0?`${repos_skipped} corrupt registry line(s) skipped`:"0 corrupt registry lines skipped"}</span>
+      </div>
+    `}
+  `;
+
+  app.querySelectorAll(".ledger-row").forEach(btn => {
+    btn.addEventListener("click", () => { location.hash = btn.dataset.nav; });
+  });
+}
+
+/* ============================== SESSION VIEW ============================== */
+function renderSessionSkeleton(){
+  app.innerHTML = `
+    <div class="skeleton" style="width:100px;height:10px;margin-bottom:16px;"></div>
+    <div class="skeleton" style="width:100%;height:220px;margin-bottom:2px;"></div>
+    <div class="skeleton" style="width:100%;height:260px;"></div>
+  `;
+}
+
+function renderSession404(id){
+  app.innerHTML = `
+    <div class="full-state">
+      <div class="void-stamp">NOT FOUND</div>
+      <h2>unknown_session</h2>
+      <p>No session matches the id <code>${esc(id)}</code> in the registered union.</p>
+      <a class="btn" href="#/">${ICON.back(11)} Return to the ledger</a>
+    </div>
+  `;
+}
+
+function factLine(k, valueHtml){
+  return `<div class="fact-line"><span class="k">${k}</span><span class="leader"></span><span class="v">${valueHtml}</span></div>`;
+}
+
+function renderSessionLoaded(s){
+  const f = s.facets;
+  const absMap = {}; s.absences.forEach(a => absMap[a.facet] = a.reason);
+
+  const logHtml = s.timeline.map(t => {
+    let body = "";
+    if (t.kind === "lifecycle"){
+      body = `<span class="log-cmd">${t.hook_event_name}</span>`;
+    } else if (t.kind === "prompt"){
+      body = t.prompt === "" ? `<em class="empty-line">(empty prompt)</em>` : esc(t.prompt);
+    } else if (t.kind === "subagent"){
+      body = `<span class="log-cmd">${t.hook_event_name}</span> <span class="muted">agent_type=${esc(t.agent_type)}</span>`;
+    } else if (t.kind === "command"){
+      const oc = t.outcome;
+      const tag = oc.state === "success" ? `<span class="outcome-stamp success">success</span>`
+        : oc.state === "failure" ? `<span class="outcome-stamp failure">failure</span>`
+        : `<span class="outcome-stamp absent">absent</span>`;
+      body = `<span class="log-cmd">${esc(t.command)}</span>${t.duration_ms!==null ? ` <span class="muted">· ${fmtDur(t.duration_ms)}</span>` : ` <span class="muted">· duration ${quietDash("not recorded")}</span>`}${tag}`
+        + (oc.state === "failure" ? `<div class="error-block">${esc(oc.error)}</div>` : "")
+        + (t.test_results ? `<div class="test-line">vitest — ${t.test_results.passed} passed, ${t.test_results.failed} failed, ${t.test_results.skipped} skipped</div>` : "");
+    }
+    const meta = [
+      t.prompt_id ? `prompt_id ${shortId(t.prompt_id)}` : null,
+      t.agent_id ? `agent_id ${t.agent_id}` : null,
+      t.tool_use_id ? `tool_use_id ${t.tool_use_id}` : null,
+    ].filter(Boolean).join(" · ");
+    return `
+      <div class="log-row">
+        <div class="log-seq">${t.seq}</div>
+        <div class="log-ts">${fmtClock(t.ts)}</div>
+        <div class="log-kind">${t.kind}</div>
+        <div>${body}${meta ? `<div class="log-meta">${meta}</div>` : ""}</div>
+      </div>
+    `;
+  }).join("");
+
+  app.innerHTML = `
+    <a class="back-link" href="#/">${ICON.back(10)} Return to the ledger</a>
+    <div class="receipt-header">
+      <div class="rid">${f.session_id} <span class="kind-tag">${f.kind === null ? "unknown" : f.kind}</span> ${f.kind === null ? redacted(absMap.kind||"kind absent") : ""}</div>
+      ${factLine("status", f.status)}
+      ${factLine("repo_root", `<span style="font-size:11px;">${esc(f.repo_root)}</span>`)}
+      ${factLine("worktree_path", f.worktree_path === null ? quietDash("main checkout") : `<span style="font-size:11px;">${esc(f.worktree_path)}</span>`)}
+      ${factLine("model", f.model === null ? quietDash("kind unknown") : f.model)}
+      ${factLine("cc_version", f.cc_version === null ? quietDash() : f.cc_version)}
+      ${factLine("sha_before", f.sha_before === null ? quietDash("boundary absent") : f.sha_before.slice(0,12))}
+      ${factLine("sha_after", f.sha_after === null ? quietDash("boundary absent") : f.sha_after.slice(0,12))}
+      ${factLine("cost", renderCost(f.cost))}
+      ${factLine("tokens", f.tokens.input === null ? redacted("tokens absent") + `<span class="derived-mark">derived</span>` : `in ${f.tokens.input.toLocaleString()} · out ${f.tokens.output.toLocaleString()} · cache-r ${f.tokens.cache_read.toLocaleString()} · cache-c ${f.tokens.cache_creation.toLocaleString()}<span class="derived-mark">derived</span>`)}
+      ${factLine("started_at", fmtDate(f.started_at))}
+      ${factLine("last_event_at", fmtDate(f.last_event_at))}
+      ${factLine("ended_at", f.ended_at === null ? quietDash("no clean end recorded") : fmtDate(f.ended_at))}
+    </div>
+
+    <div class="receipt-body">
+      <div class="section">
+        <h3>Checks</h3>
+        ${s.checks.length ? `<div class="chip-row">${s.checks.map(c => `
+          <div class="check-line"><span class="stamp ${c.passed?'pass':'fail'}">${c.passed?'pass':'fail'}</span><span>${esc(c.name)}</span><span class="muted">exit ${c.exit_code} · ${c.bound_by}</span></div>
+        `).join("")}</div>` : `<div class="empty-line">no bound checks recorded for this session — unverified.</div>`}
+      </div>
+
+      <div class="section">
+        <h3>Test results</h3>
+        ${s.test_results.length ? `<div class="chip-row">${s.test_results.map(tr => `
+          <div class="check-line"><span>${tr.parser}</span><span style="color:var(--green);">${tr.passed} passed</span><span style="color:${tr.failed>0?'var(--red)':'var(--ink-faint)'};">${tr.failed} failed</span><span class="muted">${tr.skipped} skipped</span><span class="muted">${tr.duration_ms===null?'· '+quietDash('parser could not extract duration'):'· '+fmtDur(tr.duration_ms)}</span></div>
+        `).join("")}</div>` : `<div class="empty-line">test_results: [] — facet ABSENT, no command was claimed by a parser.</div>`}
+      </div>
+
+      <div class="section">
+        <h3>Footprint</h3>
+        ${s.footprint.length ? s.footprint.map(p => `<div class="fp-item">${esc(p)}</div>`).join("") : `<div class="empty-line">no files touched — a real empty set, not ABSENT.</div>`}
+      </div>
+
+      <div class="section">
+        <h3>Timeline <span style="text-transform:none;font-weight:400;">— flat, spool order, uncapped</span></h3>
+        <div>${logHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================== ROUTER ============================== */
+function parseRoute(){
+  const h = location.hash.replace(/^#\/?/, "");
+  if (h === "" ) return { screen: "overview", mode: "loaded" };
+  if (h === "empty") return { screen: "overview", mode: "empty" };
+  if (h === "error") return { screen: "overview", mode: "error" };
+  if (h.startsWith("session/")) return { screen: "session", id: h.slice("session/".length) };
+  return { screen: "overview", mode: "loaded" };
+}
+
+function go(){
+  const route = parseRoute();
+  if (route.screen === "overview"){
+    if (route.mode === "empty") return renderOverviewEmpty();
+    if (route.mode === "error") return renderOverviewError();
+    renderOverviewSkeleton();
+    setTimeout(() => renderOverviewLoaded(OVERVIEW_LOADED, false), 420);
+  } else {
+    const s = SESSIONS[route.id];
+    if (!s) { renderSessionSkeleton(); setTimeout(() => renderSession404(route.id), 300); return; }
+    renderSessionSkeleton();
+    setTimeout(() => renderSessionLoaded(s), 380);
+  }
+}
+
+window.addEventListener("hashchange", go);
+go();
+</script>
+</body>
+</html>

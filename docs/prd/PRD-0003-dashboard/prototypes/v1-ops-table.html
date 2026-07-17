@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>coreartifact — overview (prototype V1: ops-table)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --fg:#09090b; --fg-soft:#27272a; --muted-fg:#71717a; --faint-fg:#a1a1aa;
+    --bg:#ffffff; --muted-bg:#f4f4f5; --thead-bg:#fafafa; --border:#e4e4e7;
+    --green:#15803d; --green-bg:#f0fdf4; --green-border:#bbf7d0;
+    --red:#b91c1c; --red-bg:#fef2f2; --red-border:#fecaca;
+    --amber:#b45309; --amber-bg:#fffbeb; --amber-border:#fde68a;
+    --absent-fg:#8b8b93; --absent-bg:#f7f7f8; --absent-border:#e4e4e7;
+    --radius:8px;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans); color:var(--fg); background:var(--bg);
+    font-size:13.5px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  button{font-family:inherit; font-size:inherit; cursor:pointer;}
+  .mono{font-family:var(--mono);}
+  .muted{color:var(--muted-fg);}
+  .faint{color:var(--faint-fg);}
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    height:44px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px; border-bottom:1px solid var(--border); background:var(--bg);
+    position:sticky; top:0; z-index:20;
+  }
+  .brand{display:flex; align-items:center; gap:8px; font-weight:600; letter-spacing:.01em;}
+  .brand .dot{width:7px;height:7px;border-radius:2px;background:var(--fg);}
+  .topbar nav{display:flex; gap:2px; font-size:12.5px;}
+  .topbar nav a{padding:6px 10px; border-radius:6px; color:var(--muted-fg); text-decoration:none;}
+  .topbar nav a.active{background:var(--muted-bg); color:var(--fg); font-weight:600;}
+  .topbar .tag{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--faint-fg);
+    border:1px solid var(--border); border-radius:4px; padding:2px 6px;
+  }
+
+  .shell{max-width:1180px; margin:0 auto; padding:0 16px 96px;}
+
+  /* ---------- KPI strip ---------- */
+  .kpi-strip{
+    display:flex; align-items:center; gap:22px; flex-wrap:wrap;
+    padding:16px 0 14px; border-bottom:1px solid var(--border);
+  }
+  .kpi-headline{font-size:19px; font-weight:650; letter-spacing:-.01em; white-space:nowrap;}
+  .kpi-split{display:flex; align-items:center; gap:10px; font-size:12.5px;}
+  .split-chip{display:flex; align-items:center; gap:5px; padding:3px 8px; border-radius:999px; border:1px solid; white-space:nowrap;}
+  .split-chip .n{font-weight:700; font-variant-numeric:tabular-nums;}
+  .split-chip.verified{color:var(--green); background:var(--green-bg); border-color:var(--green-border);}
+  .split-chip.failing{color:var(--red); background:var(--red-bg); border-color:var(--red-border);}
+  .split-chip.unverified{color:var(--muted-fg); background:var(--muted-bg); border-color:var(--border);}
+  .split-chip.unknown{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border);}
+  .kpi-window{margin-left:auto; font-size:11.5px; color:var(--faint-fg); white-space:nowrap;}
+
+  /* ---------- tiles row (compact, table energy not hero cards) ---------- */
+  .tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:0; border-bottom:1px solid var(--border);}
+  .tile{padding:12px 18px; border-right:1px solid var(--border);}
+  .tile:last-child{border-right:none;}
+  .tile-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted-fg); margin-bottom:4px;}
+  .tile-value{font-size:16px; font-weight:650; font-variant-numeric:tabular-nums;}
+  .tile-sub{font-size:11.5px; color:var(--muted-fg); margin-top:2px;}
+  .tile-sub.warn{color:var(--amber);}
+  .kind-breakdown{display:flex; gap:10px; font-size:11.5px; color:var(--muted-fg); margin-top:2px; font-variant-numeric:tabular-nums;}
+
+  /* ---------- banners ---------- */
+  .banner{
+    display:flex; gap:10px; align-items:flex-start; padding:9px 14px; font-size:12.5px;
+    border-bottom:1px solid var(--border);
+  }
+  .banner.drift{background:var(--amber-bg); color:#7c4a05;}
+  .banner.repo-warn{background:#fff; color:var(--fg-soft); border-bottom:1px solid var(--border);}
+  .banner svg{flex-shrink:0; margin-top:1px;}
+  .banner-lines{display:flex; flex-direction:column; gap:2px;}
+  .banner code{font-family:var(--mono); font-size:11.5px; background:rgba(0,0,0,.05); padding:1px 4px; border-radius:4px;}
+
+  /* ---------- table ---------- */
+  table.sessions{width:100%; border-collapse:collapse; font-size:12.8px;}
+  table.sessions thead th{
+    position:sticky; top:44px; background:var(--thead-bg); text-align:left; font-weight:600;
+    font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted-fg);
+    padding:8px 10px; border-bottom:1px solid var(--border);
+  }
+  table.sessions td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle;}
+  table.sessions tbody tr{cursor:pointer;}
+  table.sessions tbody tr:hover{background:var(--muted-bg);}
+  table.sessions tbody tr:focus-visible, table.sessions tbody tr:focus{outline:2px solid #2563eb; outline-offset:-2px; background:var(--muted-bg);}
+  .sid{font-family:var(--mono); font-size:12px;}
+  .row-repo{color:var(--muted-fg); font-size:11.5px;}
+  .list-footer{display:flex; justify-content:space-between; align-items:center; padding:10px 10px; font-size:11.5px; color:var(--muted-fg);}
+
+  .badge{
+    display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:5px;
+    font-size:11px; font-weight:600; letter-spacing:.02em; border:1px solid; white-space:nowrap;
+  }
+  .badge.verified{color:var(--green); background:var(--green-bg); border-color:var(--green-border);}
+  .badge.failing{color:var(--red); background:var(--red-bg); border-color:var(--red-border);}
+  .badge.unverified{color:var(--muted-fg); background:var(--muted-bg); border-color:var(--border);}
+  .badge.kind-headless{color:#3730a3; background:#eef2ff; border-color:#c7d2fe;}
+  .badge.kind-interactive{color:#0f766e; background:#f0fdfa; border-color:#99f6e4;}
+  .badge.kind-unknown{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border);}
+  .dash-quiet{color:var(--faint-fg);}
+
+  /* ---------- absent marker (V1 taste: dense monospace pill, tooltip = reason) ---------- */
+  .absent{
+    display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:10.5px;
+    color:var(--absent-fg); background:var(--absent-bg); border:1px dashed var(--absent-border);
+    padding:1px 6px; border-radius:4px; cursor:help;
+  }
+  .derived-tag{
+    font-size:9.5px; color:var(--faint-fg); border:1px solid var(--border); border-radius:3px;
+    padding:0 4px; margin-left:5px; vertical-align:1px; letter-spacing:.03em;
+  }
+
+  /* ---------- skeleton / loading ---------- */
+  .skeleton{background:linear-gradient(90deg,#f0f0f1 25%,#f7f7f8 37%,#f0f0f1 63%); background-size:400% 100%; animation:shimmer 1.3s ease infinite; border-radius:4px;}
+  @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
+  .skel-line{height:12px; margin:4px 0;}
+
+  /* ---------- empty / error full states ---------- */
+  .full-state{padding:64px 16px; text-align:center; max-width:460px; margin:0 auto;}
+  .full-state svg{margin-bottom:14px;}
+  .full-state h2{font-size:15px; margin:0 0 6px;}
+  .full-state p{font-size:12.8px; color:var(--muted-fg); margin:0 0 16px;}
+  .full-state .zero-kpi{font-size:19px; font-weight:650; margin-bottom:4px;}
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--bg);
+    padding:6px 12px; border-radius:6px; font-size:12.5px; font-weight:600;
+  }
+  .btn:hover{background:var(--muted-bg);}
+
+  /* ---------- session view ---------- */
+  .session-head{padding:18px 0 14px; border-bottom:1px solid var(--border);}
+  .back-link{display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted-fg); text-decoration:none; margin-bottom:10px;}
+  .back-link:hover{color:var(--fg);}
+  .session-title{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .session-title h1{font-size:15px; font-family:var(--mono); font-weight:600; margin:0;}
+  .facet-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px 22px; margin-top:16px;}
+  .facet{display:flex; flex-direction:column; gap:3px;}
+  .facet .k{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-fg);}
+  .facet .v{font-size:12.8px; font-family:var(--mono);}
+  .facet .v.plain{font-family:var(--sans);}
+
+  .section{padding:16px 0; border-bottom:1px solid var(--border);}
+  .section h3{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-fg); margin:0 0 10px; font-weight:700;}
+  .checks-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .check-badge{display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:6px; padding:5px 10px; font-size:12px;}
+  .footprint-list{display:flex; flex-wrap:wrap; gap:6px;}
+  .footprint-item{font-family:var(--mono); font-size:11.5px; background:var(--muted-bg); border:1px solid var(--border); border-radius:5px; padding:2px 7px;}
+  .empty-line{font-size:12.5px; color:var(--faint-fg); font-style:italic;}
+
+  .timeline{border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .tl-row{display:grid; grid-template-columns:34px 92px 74px 1fr; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border); font-size:12.3px; align-items:flex-start;}
+  .tl-row:last-child{border-bottom:none;}
+  .tl-row.lifecycle{background:#fafafa;}
+  .tl-row.prompt{background:#fbfbff;}
+  .tl-seq{color:var(--faint-fg); font-family:var(--mono); font-size:11px; padding-top:1px;}
+  .tl-ts{font-family:var(--mono); font-size:11px; color:var(--muted-fg); white-space:nowrap; padding-top:1px;}
+  .tl-kind{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted-fg); padding-top:2px;}
+  .tl-body{min-width:0;}
+  .tl-cmd{font-family:var(--mono); font-size:12.3px;}
+  .tl-meta{font-size:10.8px; color:var(--faint-fg); margin-top:3px; font-family:var(--mono);}
+  .outcome{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:1px 7px; border-radius:4px; border:1px solid; margin-left:8px;}
+  .outcome.success{color:var(--green); background:var(--green-bg); border-color:var(--green-border);}
+  .outcome.failure{color:var(--red); background:var(--red-bg); border-color:var(--red-border);}
+  .outcome.absent{color:var(--absent-fg); background:var(--absent-bg); border-color:var(--absent-border);}
+  .error-text{color:var(--red); font-size:11.8px; margin-top:5px; font-family:var(--mono); white-space:pre-wrap;}
+  .test-inline{font-size:11px; color:var(--muted-fg); margin-left:8px;}
+
+  /* ---------- prototype dev toolbar (not product chrome) ---------- */
+  .protobar{
+    position:fixed; bottom:0; left:0; right:0; background:#1c1c1f; color:#e4e4e7;
+    font-size:11px; padding:7px 14px; display:flex; gap:14px; flex-wrap:wrap; align-items:center;
+    border-top:2px dashed #52525b; z-index:50;
+  }
+  .protobar b{color:#a1a1aa; font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:10px;}
+  .protobar a{color:#93c5fd; text-decoration:none; white-space:nowrap;}
+  .protobar a:hover{text-decoration:underline;}
+  .protobar .sep{color:#52525b;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span> coreartifact</div>
+  <nav>
+    <a href="#/" class="active">Overview</a>
+  </nav>
+  <span class="tag">read-only</span>
+</div>
+
+<div id="app" class="shell"></div>
+
+<div class="protobar">
+  <b>Prototype states</b>
+  <a href="#/">Overview: loaded</a><span class="sep">·</span>
+  <a href="#/empty">Overview: empty registry</a><span class="sep">·</span>
+  <a href="#/error">Overview: error</a><span class="sep">·</span>
+  <a href="#/session/A">Session: verified (rich)</a><span class="sep">·</span>
+  <a href="#/session/B">failing</a><span class="sep">·</span>
+  <a href="#/session/C">unverified (sparse)</a><span class="sep">·</span>
+  <a href="#/session/D">interactive+drift</a><span class="sep">·</span>
+  <a href="#/session/E">unknown-kind</a><span class="sep">·</span>
+  <a href="#/session/nope">unknown id (404)</a>
+</div>
+
+<script>
+/* ============================== ICONS ============================== */
+const ICON = {
+  check: (s=14)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  x: (s=14)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+  dash: (s=14)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>`,
+  alert: (s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
+  back: (s=13)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>`,
+  server: (s=28)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="1"/><rect x="2" y="14" width="20" height="7" rx="1"/><line x1="6" y1="6.5" x2="6.01" y2="6.5"/><line x1="6" y1="17.5" x2="6.01" y2="17.5"/></svg>`,
+};
+
+/* ============================== FIXTURE DATA ============================== */
+const REPO_ROOT = "/Users/robbiejack/dev/coreartifact";
+const REPO_UNREADABLE = "/Users/robbiejack/dev/side-quest-api";
+const SID = {
+  A: "6f1a2e3c-8b4d-4a9f-9c21-7d5e6a3b1f08",
+  B: "2b7f9d0e-4c1a-4e8b-8f3d-9a6c2e5b7d14",
+  C: "d4e8a1c3-5f7b-4a2d-8e9c-1b3f6a8d2c50",
+  D: "a9c3e5f1-2d8b-4c6a-9e4f-7b1d3a5c8e92",
+  E: "5e2c8a4f-1b6d-4e9a-8c3f-2d7a9b5e1c46",
+};
+
+const OVERVIEW_LOADED = {
+  window: { start: "2026-07-10T09:12:44.000-07:00", end: "2026-07-17T09:12:44.000-07:00", days: 7 },
+  kpi: { delegated_total: 3, verified: 1, failing: 1, unverified: 1, unknown_kind: 1 },
+  tiles: {
+    spend_present_usd: 1.51345,
+    cost_absent_count: 1,
+    sessions_by_kind: { headless: 3, interactive: 1, unknown: 1 },
+    failing_checks: 1,
+  },
+  sessions: {
+    latest: [
+      { session_id: SID.A, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-17T14:32:00.000Z", classification: "verified", cost: { value: null, derived: true } },
+      { session_id: SID.B, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-17T11:05:00.000Z", classification: "failing", cost: { value: 0.812624, derived: true } },
+      { session_id: SID.C, repo_root: REPO_ROOT, kind: "headless", status: "closed-clean", started_at: "2026-07-16T22:47:00.000Z", classification: "unverified", cost: { value: 0.300000, derived: true } },
+      { session_id: SID.D, repo_root: REPO_ROOT, kind: "interactive", status: "closed-inferred", started_at: "2026-07-16T09:15:00.000Z", classification: null, cost: { value: 0.213326, derived: true } },
+      { session_id: SID.E, repo_root: REPO_ROOT, kind: null, status: "closed-inferred", started_at: "2026-07-15T03:40:00.000Z", classification: null, cost: { value: 0.187500, derived: true } },
+    ],
+    total: 5,
+  },
+  repos: [
+    { root: REPO_ROOT, status: "ok" },
+    { root: REPO_UNREADABLE, status: "unreadable", reason: "database disk image is malformed" },
+  ],
+  repos_skipped: 0,
+  drift: [
+    { session_id: SID.D, version: "2.1.212", range: { min: "2.1.208", max: "2.1.211" } },
+  ],
+};
+
+const OVERVIEW_EMPTY = {
+  window: { start: "2026-07-10T09:12:44.000-07:00", end: "2026-07-17T09:12:44.000-07:00", days: 7 },
+  kpi: { delegated_total: 0, verified: 0, failing: 0, unverified: 0, unknown_kind: 0 },
+  tiles: { spend_present_usd: 0, cost_absent_count: 0, sessions_by_kind: { headless: 0, interactive: 0, unknown: 0 }, failing_checks: 0 },
+  sessions: { latest: [], total: 0 },
+  repos: [],
+  repos_skipped: 0,
+  drift: [],
+};
+
+const P1 = "b6a2e9f1-4c7d-4a3e-8f1b-2d9c6a4e7b31";
+
+const SESSIONS = {
+  A: {
+    key: "A",
+    facets: {
+      session_id: SID.A, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "8f2a1c9d4e7b6a3f5c8d1e9b2a4f6c8d0e3b5a7c",
+      sha_after: "3d9e7b1c5a8f2d4e6b9c1a3f5d7e9b1c3a5d7f9b",
+      model: "claude-3-7-experimental", cc_version: "2.1.211",
+      cost: { value: null, derived: true },
+      tokens: { derived: true, input: 12400, output: 3180, cache_read: 0, cache_creation: 5120 },
+      started_at: "2026-07-17T14:32:00.000Z", last_event_at: "2026-07-17T14:39:41.900Z", ended_at: "2026-07-17T14:39:42.000Z",
+    },
+    checks: [{ name: "typecheck", exit_code: 0, passed: true, truncated: false, bound_by: "single-open" }],
+    test_results: [{ line_no: 42, parser: "vitest", passed: 18, failed: 0, skipped: 1, duration_ms: 3400, failed_names: [] }],
+    footprint: ["src/dashboard/server.ts", "src/dashboard/routes/overview.ts", "src/render/absent.ts", "tests/acceptance/dashboard.test.ts"],
+    absences: [{ facet: "cost", reason: "model unpinned: claude-3-7-experimental" }],
+    timeline: [
+      { seq: 1, ts: "2026-07-17T14:32:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-17T14:32:01.200Z", kind: "prompt", prompt: "Run typecheck and the test suite, then try reading a scratch report file that should not exist (expected to fail), and spawn a background subagent to check disk usage. Report back when done.", prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-17T14:32:05.400Z", kind: "command", command: "pnpm run typecheck", duration_ms: 1180, outcome: { state: "success" }, test_results: null, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01A8f3JxRt7Kd2m9QeZs6Vn1" },
+      { seq: 4, ts: "2026-07-17T14:33:10.800Z", kind: "command", command: "pnpm test", duration_ms: 3400, outcome: { state: "success" }, test_results: { passed: 18, failed: 0, skipped: 1, duration_ms: 3400, failed_names: [] }, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01Bz6dPqWm4Yh8Ls2NfTr9Uk" },
+      { seq: 5, ts: "2026-07-17T14:34:02.150Z", kind: "command", command: "cat /private/tmp/scratch-report.txt", duration_ms: 14, outcome: { state: "failure", error: "cat: /private/tmp/scratch-report.txt: No such file or directory" }, test_results: null, prompt_id: P1, agent_id: null, agent_type: null, tool_use_id: "toolu_01Cq9wXeNb3Fh7Ss1MgYp5Tz" },
+      { seq: 6, ts: "2026-07-17T14:34:20.000Z", kind: "subagent", hook_event_name: "SubagentStart", prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: null },
+      { seq: 7, ts: "2026-07-17T14:34:21.500Z", kind: "command", command: "du -sh . && sleep 90", duration_ms: null, outcome: { state: "absent" }, test_results: null, prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: "toolu_01Dr2yZfQc8Jk4Nt6VhWm3Xp" },
+      { seq: 8, ts: "2026-07-17T14:39:38.700Z", kind: "subagent", hook_event_name: "SubagentStop", prompt_id: P1, agent_id: "agent-9f3c7a1e2b6d", agent_type: "general-purpose", tool_use_id: null },
+      { seq: 9, ts: "2026-07-17T14:39:41.900Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  B: {
+    key: "B",
+    facets: {
+      session_id: SID.B, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "1a4c8e2b5d9f3a7c6b8e0d2f4a6c8e1b3d5f7a90",
+      sha_after: "9b3d7f1a5c8e2b4d6f0a2c4e6b8d0f2a4c6e8b13",
+      model: "claude-sonnet-5", cc_version: "2.1.209",
+      cost: { value: 0.812624, derived: true },
+      tokens: { derived: true, input: 20500, output: 6120, cache_read: 1024, cache_creation: 0 },
+      started_at: "2026-07-17T11:05:00.000Z", last_event_at: "2026-07-17T11:11:52.300Z", ended_at: "2026-07-17T11:11:52.400Z",
+    },
+    checks: [{ name: "typecheck", exit_code: 1, passed: false, truncated: false, bound_by: "single-open" }],
+    test_results: [],
+    footprint: ["src/dashboard/routes/session.ts"],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-17T11:05:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-17T11:05:02.000Z", kind: "prompt", prompt: "Wire the session route and run typecheck before finishing.", prompt_id: "3f8a1d5c-9b2e-4c6a-8d4f-1a3c5e7b9d20", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-17T11:11:40.100Z", kind: "command", command: "pnpm run typecheck", duration_ms: 2200, outcome: { state: "failure", error: "src/dashboard/routes/session.ts(88,7): error TS2322: Type 'string | null' is not assignable to type 'string'." }, test_results: null, prompt_id: "3f8a1d5c-9b2e-4c6a-8d4f-1a3c5e7b9d20", agent_id: null, agent_type: null, tool_use_id: "toolu_02Ee7fRt4Nc9Xm1QpZs8Vb3Lk" },
+      { seq: 4, ts: "2026-07-17T11:11:52.300Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  C: {
+    key: "C",
+    facets: {
+      session_id: SID.C, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-clean", kind: "headless",
+      sha_before: "c2e6a0f4b8d2a6c0e4b8d2a6c0e4b8d2a6c0e4b8",
+      sha_after: "c2e6a0f4b8d2a6c0e4b8d2a6c0e4b8d2a6c0e4b8",
+      model: "claude-sonnet-5", cc_version: "2.1.210",
+      cost: { value: 0.300000, derived: true },
+      tokens: { derived: true, input: 4200, output: 980, cache_read: 0, cache_creation: 0 },
+      started_at: "2026-07-16T22:47:00.000Z", last_event_at: "2026-07-16T22:49:03.000Z", ended_at: "2026-07-16T22:49:03.500Z",
+    },
+    checks: [],
+    test_results: [],
+    footprint: [],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-16T22:47:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-16T22:47:04.000Z", kind: "prompt", prompt: "Summarize the current state of the dashboard PRD without making changes.", prompt_id: "5c9e2a7f-1d4b-4e8c-9a3f-6b2d8e4c1a70", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-16T22:49:03.000Z", kind: "lifecycle", hook_event_name: "SessionEnd", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+    ],
+  },
+  D: {
+    key: "D",
+    facets: {
+      session_id: SID.D, repo_root: REPO_ROOT, worktree_path: "/Users/robbiejack/dev/.worktrees/coreartifact-dashboard-spike",
+      status: "closed-inferred", kind: "interactive",
+      sha_before: "7a1c5e9b3d7f1a5c9e3b7d1f5a9c3e7b1d5f9a30",
+      sha_after: "4e8b2d6a0c4e8b2d6a0c4e8b2d6a0c4e8b2d6a01",
+      model: "claude-opus-4-8", cc_version: "2.1.212",
+      cost: { value: 0.213326, derived: true },
+      tokens: { derived: true, input: 9800, output: 2410, cache_read: 512, cache_creation: 0 },
+      started_at: "2026-07-16T09:15:00.000Z", last_event_at: "2026-07-16T09:52:18.000Z", ended_at: null,
+    },
+    checks: [],
+    test_results: [],
+    footprint: ["src/dashboard/components/DriftBanner.tsx", "src/dashboard/components/KpiHeadline.tsx"],
+    absences: [],
+    timeline: [
+      { seq: 1, ts: "2026-07-16T09:15:00.000Z", kind: "lifecycle", hook_event_name: "SessionStart", prompt_id: null, agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-16T09:15:03.000Z", kind: "prompt", prompt: "Let's explore three dashboard layout directions before we lock the PRD.", prompt_id: "9d3f7a1c-5e8b-4c2d-9f6a-1b4d7e2c8f50", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 3, ts: "2026-07-16T09:52:18.000Z", kind: "command", command: "pnpm run dev", duration_ms: 850, outcome: { state: "success" }, test_results: null, prompt_id: "9d3f7a1c-5e8b-4c2d-9f6a-1b4d7e2c8f50", agent_id: null, agent_type: null, tool_use_id: "toolu_04Gh1kTr6Yb3Zp9WmSt2Vf7Nc" },
+    ],
+  },
+  E: {
+    key: "E",
+    facets: {
+      session_id: SID.E, repo_root: REPO_ROOT, worktree_path: null,
+      status: "closed-inferred", kind: null,
+      sha_before: null, sha_after: null,
+      model: null, cc_version: null,
+      cost: { value: 0.187500, derived: true },
+      tokens: { derived: true, input: 3100, output: 640, cache_read: 0, cache_creation: 0 },
+      started_at: "2026-07-15T03:40:00.000Z", last_event_at: "2026-07-15T03:41:12.000Z", ended_at: null,
+    },
+    checks: [],
+    test_results: [],
+    footprint: [],
+    absences: [{ facet: "kind", reason: "no SessionStart captured" }],
+    timeline: [
+      { seq: 1, ts: "2026-07-15T03:40:00.000Z", kind: "prompt", prompt: "continue", prompt_id: "1f4a8c2e-6b9d-4a3f-8e1c-5b7d9a2f4c60", agent_id: null, agent_type: null, tool_use_id: null },
+      { seq: 2, ts: "2026-07-15T03:41:12.000Z", kind: "command", command: "echo ok", duration_ms: 40, outcome: { state: "success" }, test_results: null, prompt_id: "1f4a8c2e-6b9d-4a3f-8e1c-5b7d9a2f4c60", agent_id: null, agent_type: null, tool_use_id: "toolu_03Ff8gSt5Od0Yn2RqAt9Wc4Ml" },
+    ],
+  },
+};
+
+/* ============================== HELPERS ============================== */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtMoney(v){ return "$" + v.toFixed(2); }
+function fmtDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+}
+function fmtClock(iso){
+  const d = new Date(iso);
+  return d.toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit", second:"2-digit" });
+}
+function fmtDur(ms){ if (ms===null||ms===undefined) return null; return ms < 1000 ? ms+"ms" : (ms/1000).toFixed(2)+"s"; }
+function shortId(id){ return id.slice(0,8); }
+
+function classBadge(c){
+  if (c === "verified") return `<span class="badge verified">${ICON.check(11)} verified</span>`;
+  if (c === "failing") return `<span class="badge failing">${ICON.x(11)} failing</span>`;
+  if (c === "unverified") return `<span class="badge unverified">${ICON.dash(11)} unverified</span>`;
+  return `<span class="dash-quiet" title="not a delegated (headless) session — classification is only defined for delegation">—</span>`;
+}
+function kindBadge(k){
+  if (k === "headless") return `<span class="badge kind-headless">headless</span>`;
+  if (k === "interactive") return `<span class="badge kind-interactive">interactive</span>`;
+  return `<span class="badge kind-unknown">unknown</span>`;
+}
+/* ABSENT rendering, V1 taste: dashed monospace pill + native title tooltip carrying the reason.
+   Self-describing nullables (no absences row) render as a quiet plain dash instead — never
+   dressed up as a mystery. */
+function absentPill(reason){
+  return `<span class="absent" title="${esc(reason)}">ABSENT</span>`;
+}
+function quietDash(note){
+  return `<span class="dash-quiet"${note ? ` title="${esc(note)}"` : ""}>—</span>`;
+}
+function renderCost(cost){
+  if (cost.value === null) return absentPill("cost absent — see facet detail") + `<span class="derived-tag">derived</span>`;
+  return `${fmtMoney(cost.value)}<span class="derived-tag">derived</span>`;
+}
+
+const app = document.getElementById("app");
+
+/* ============================== OVERVIEW ============================== */
+function renderOverviewSkeleton(){
+  app.innerHTML = `
+    <div style="padding:20px 0;">
+      <div class="skeleton skel-line" style="width:340px;height:22px;"></div>
+      <div class="skeleton skel-line" style="width:220px;"></div>
+    </div>
+    <div class="skeleton" style="height:40px;margin-bottom:1px;"></div>
+    <div style="margin-top:16px;">
+      ${Array.from({length:5}).map(()=>`<div class="skeleton skel-line" style="height:16px;"></div>`).join("")}
+    </div>
+  `;
+}
+
+function renderOverviewError(){
+  app.innerHTML = `
+    <div class="full-state">
+      ${ICON.alert(30)}
+      <h2>Couldn't load the overview</h2>
+      <p>The dashboard server didn't respond. It may still be starting, or the process may have exited. This is a simulated failure state for review.</p>
+      <a class="btn" href="#/">${ICON.back(12)} Back to loaded overview</a>
+    </div>
+  `;
+}
+
+function renderOverviewEmpty(){ renderOverviewLoaded(OVERVIEW_EMPTY, true); }
+
+function renderOverviewLoaded(data, isEmpty){
+  const { kpi, tiles, sessions, repos, repos_skipped, drift, window: win } = data;
+
+  const unreadable = repos.filter(r => r.status === "unreadable");
+  const readableCount = repos.length - unreadable.length;
+
+  const rowsHtml = sessions.latest.map(s => `
+    <tr tabindex="0" data-nav="#/session/${Object.keys(SID).find(k=>SID[k]===s.session_id) || 'nope'}">
+      <td class="sid" title="${esc(s.session_id)}">${shortId(s.session_id)}</td>
+      <td>${kindBadge(s.kind)}</td>
+      <td class="row-repo mono">${esc(s.repo_root.split("/").pop())}</td>
+      <td>${s.status}</td>
+      <td>${classBadge(s.classification)}</td>
+      <td>${renderCost(s.cost)}</td>
+      <td class="muted">${fmtDate(s.started_at)}</td>
+    </tr>
+  `).join("");
+
+  app.innerHTML = `
+    <div class="kpi-strip">
+      <div class="kpi-headline">${kpi.verified} of ${kpi.delegated_total} delegated sessions verified</div>
+      <div class="kpi-split">
+        <span class="split-chip verified"><span class="n">${kpi.verified}</span> verified</span>
+        <span class="split-chip failing"><span class="n">${kpi.failing}</span> failing</span>
+        <span class="split-chip unverified"><span class="n">${kpi.unverified}</span> unverified</span>
+        ${kpi.unknown_kind > 0 ? `<span class="split-chip unknown"><span class="n">${kpi.unknown_kind}</span> session${kpi.unknown_kind===1?"":"s"} of unknown kind</span>` : ""}
+      </div>
+      <div class="kpi-window">window: ${fmtDate(win.start)} – ${fmtDate(win.end)} (${win.days}d, local)</div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="tile-label">Spend (present)</div>
+        <div class="tile-value">${fmtMoney(tiles.spend_present_usd)}</div>
+        <div class="tile-sub ${tiles.cost_absent_count>0?'warn':''}">${tiles.cost_absent_count>0 ? `cost absent for ${tiles.cost_absent_count} session${tiles.cost_absent_count===1?"":"s"}` : "cost present for every in-window session"}</div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Sessions by kind</div>
+        <div class="tile-value">${tiles.sessions_by_kind.headless + tiles.sessions_by_kind.interactive + tiles.sessions_by_kind.unknown}</div>
+        <div class="kind-breakdown">
+          <span>${tiles.sessions_by_kind.headless} headless</span>
+          <span>${tiles.sessions_by_kind.interactive} interactive</span>
+          <span>${tiles.sessions_by_kind.unknown} unknown</span>
+        </div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">Failing bound checks</div>
+        <div class="tile-value">${tiles.failing_checks}</div>
+        <div class="tile-sub">in-window, session-bound only</div>
+      </div>
+    </div>
+
+    ${drift.length ? drift.map(d => `
+      <div class="banner drift">
+        ${ICON.alert(15)}
+        <div class="banner-lines">
+          <div><b>Drift banner</b> — session <code>${shortId(d.session_id)}</code> recorded Claude Code <code>${d.version}</code>, outside the tested range <code>${d.range.min}–${d.range.max}</code>.</div>
+        </div>
+      </div>
+    `).join("") : ""}
+
+    ${unreadable.length ? unreadable.map(r => `
+      <div class="banner repo-warn">
+        ${ICON.alert(15)}
+        <div class="banner-lines">
+          <div>${readableCount} of ${repos.length} registered repos readable — <code>${esc(r.root)}</code> is <b>unreadable</b>: ${esc(r.reason)}</div>
+        </div>
+      </div>
+    `).join("") : ""}
+
+    ${isEmpty ? `
+      <div class="full-state" style="padding-top:56px;">
+        ${ICON.server(30)}
+        <h2>No registered repos yet</h2>
+        <p>Run <code class="mono">coreartifact init</code> in a repo to register its ledger. The overview renders honest zeros until then — never a blank screen.</p>
+      </div>
+    ` : `
+      <table class="sessions">
+        <thead>
+          <tr>
+            <th style="width:90px;">Session</th>
+            <th style="width:100px;">Kind</th>
+            <th style="width:140px;">Repo</th>
+            <th style="width:110px;">Status</th>
+            <th style="width:110px;">Classification</th>
+            <th style="width:120px;">Cost</th>
+            <th>Started</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <div class="list-footer">
+        <span>Showing latest ${sessions.latest.length} of ${sessions.total}</span>
+        <span>${repos_skipped > 0 ? `${repos_skipped} corrupt registry line(s) skipped` : "registry: 0 corrupt lines skipped"}</span>
+      </div>
+    `}
+  `;
+
+  app.querySelectorAll("tr[data-nav]").forEach(tr => {
+    tr.addEventListener("click", () => { location.hash = tr.dataset.nav; });
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); location.hash = tr.dataset.nav; } });
+  });
+}
+
+/* ============================== SESSION VIEW ============================== */
+function renderSessionSkeleton(){
+  app.innerHTML = `
+    <div style="padding:20px 0;">
+      <div class="skeleton skel-line" style="width:120px;"></div>
+      <div class="skeleton skel-line" style="width:260px;height:20px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:16px;">
+        ${Array.from({length:8}).map(()=>`<div class="skeleton skel-line"></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderSession404(id){
+  app.innerHTML = `
+    <div class="full-state">
+      ${ICON.alert(30)}
+      <h2>404 — unknown_session</h2>
+      <p>No session matches the id <code class="mono">${esc(id)}</code> in the registered union.</p>
+      <a class="btn" href="#/">${ICON.back(12)} Back to overview</a>
+    </div>
+  `;
+}
+
+function facetRow(k, valueHtml){
+  return `<div class="facet"><div class="k">${k}</div><div class="v">${valueHtml}</div></div>`;
+}
+
+function renderSessionLoaded(s){
+  const f = s.facets;
+  const absMap = {}; s.absences.forEach(a => absMap[a.facet] = a.reason);
+
+  const timelineHtml = s.timeline.map(t => {
+    let body = "";
+    let kindLabel = t.kind;
+    if (t.kind === "lifecycle"){
+      body = `<span class="mono">${t.hook_event_name}</span>`;
+    } else if (t.kind === "prompt"){
+      body = `<span>${t.prompt === "" ? `<em class="empty-line">(empty prompt)</em>` : esc(t.prompt)}</span>`;
+    } else if (t.kind === "subagent"){
+      body = `<span class="mono">${t.hook_event_name}</span> <span class="muted">agent_type=${esc(t.agent_type)}</span>`;
+    } else if (t.kind === "command"){
+      const oc = t.outcome;
+      const ocBadge = oc.state === "success" ? `<span class="outcome success">${ICON.check(10)} success</span>`
+        : oc.state === "failure" ? `<span class="outcome failure">${ICON.x(10)} failure</span>`
+        : `<span class="outcome absent">${ICON.dash(10)} absent</span>`;
+      body = `<span class="tl-cmd">${esc(t.command)}</span>${t.duration_ms!==null ? `<span class="muted"> · ${fmtDur(t.duration_ms)}</span>` : `<span class="muted"> · duration ${quietDash("not recorded")}</span>`}${ocBadge}`
+        + (oc.state === "failure" ? `<div class="error-text">${esc(oc.error)}</div>` : "")
+        + (t.test_results ? `<div class="test-inline">vitest — ${t.test_results.passed} passed, ${t.test_results.failed} failed, ${t.test_results.skipped} skipped</div>` : "");
+    }
+    const meta = [
+      t.prompt_id ? `prompt_id ${shortId(t.prompt_id)}` : null,
+      t.agent_id ? `agent_id ${t.agent_id}` : null,
+      t.tool_use_id ? `tool_use_id ${t.tool_use_id}` : null,
+    ].filter(Boolean).join(" · ");
+    return `
+      <div class="tl-row ${t.kind}">
+        <div class="tl-seq">${t.seq}</div>
+        <div class="tl-ts">${fmtClock(t.ts)}</div>
+        <div class="tl-kind">${kindLabel}</div>
+        <div class="tl-body">${body}${meta ? `<div class="tl-meta">${meta}</div>` : ""}</div>
+      </div>
+    `;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="session-head">
+      <a class="back-link" href="#/">${ICON.back(11)} Back to overview</a>
+      <div class="session-title">
+        <h1>${f.session_id}</h1>
+        ${kindBadge(f.kind === null ? "unknown" : f.kind)}
+        ${f.kind === null ? `<span class="dash-quiet" style="font-size:11.5px;" title="${esc(absMap.kind||'')}">(kind ABSENT — hover)</span>` : ""}
+      </div>
+      <div class="facet-grid">
+        ${facetRow("status", f.status)}
+        ${facetRow("repo_root", `<span class="v plain mono" style="font-size:11.5px;">${esc(f.repo_root)}</span>`)}
+        ${facetRow("worktree_path", f.worktree_path === null ? `<span class="v plain">${quietDash("main checkout — no worktree")}<span style="font-size:11px;color:var(--faint-fg);"> main checkout</span></span>` : `<span style="font-size:11.5px;">${esc(f.worktree_path)}</span>`)}
+        ${facetRow("model", f.model === null ? absentPill(absMap.kind ? "n/a" : "unavailable") : f.model)}
+        ${facetRow("cc_version", f.cc_version === null ? quietDash() : f.cc_version)}
+        ${facetRow("sha_before", f.sha_before === null ? quietDash("boundary line absent") : f.sha_before.slice(0,10))}
+        ${facetRow("sha_after", f.sha_after === null ? quietDash("boundary line absent") : f.sha_after.slice(0,10))}
+        ${facetRow("cost", renderCost(f.cost) + (absMap.cost ? ` <span style="font-size:10.5px;color:var(--muted-fg);">— ${esc(absMap.cost)}</span>` : ""))}
+        ${facetRow("tokens", f.tokens.input === null ? absentPill("tokens absent") + `<span class="derived-tag">derived</span>` : `in ${f.tokens.input.toLocaleString()} / out ${f.tokens.output.toLocaleString()} / cache-read ${f.tokens.cache_read.toLocaleString()} / cache-create ${f.tokens.cache_creation.toLocaleString()}<span class="derived-tag">derived</span>`)}
+        ${facetRow("started_at", fmtDate(f.started_at))}
+        ${facetRow("last_event_at", fmtDate(f.last_event_at))}
+        ${facetRow("ended_at", f.ended_at === null ? quietDash("no clean session end recorded") : fmtDate(f.ended_at))}
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Checks</h3>
+      ${s.checks.length ? `<div class="checks-row">${s.checks.map(c => `
+        <div class="check-badge">
+          ${c.passed ? `<span style="color:var(--green);">${ICON.check(13)}</span>` : `<span style="color:var(--red);">${ICON.x(13)}</span>`}
+          <span class="mono">${esc(c.name)}</span>
+          <span class="muted">exit ${c.exit_code}</span>
+          <span class="muted">· bound: ${c.bound_by}</span>
+        </div>
+      `).join("")}</div>` : `<div class="empty-line">No bound checks recorded for this session — unverified.</div>`}
+    </div>
+
+    <div class="section">
+      <h3>Test results</h3>
+      ${s.test_results.length ? s.test_results.map(tr => `
+        <div class="check-badge" style="display:inline-flex;">
+          <span class="mono">${tr.parser}</span>
+          <span style="color:var(--green);">${tr.passed} passed</span>
+          <span style="color:${tr.failed>0?'var(--red)':'var(--muted-fg)'};">${tr.failed} failed</span>
+          <span class="muted">${tr.skipped} skipped</span>
+          <span class="muted">${tr.duration_ms===null? '· duration '+quietDash('parser could not extract it') : '· '+fmtDur(tr.duration_ms)}</span>
+        </div>
+      `).join("") : `<div class="empty-line">test_results: [] — facet ABSENT, no command was claimed by a parser.</div>`}
+    </div>
+
+    <div class="section">
+      <h3>Footprint</h3>
+      ${s.footprint.length ? `<div class="footprint-list">${s.footprint.map(p => `<span class="footprint-item">${esc(p)}</span>`).join("")}</div>` : `<div class="empty-line">No files touched — a real empty set, not ABSENT.</div>`}
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <h3>Timeline <span style="text-transform:none;font-weight:400;color:var(--faint-fg);">(flat, spool order, uncapped)</span></h3>
+      <div class="timeline">${timelineHtml}</div>
+    </div>
+  `;
+}
+
+/* ============================== ROUTER ============================== */
+function parseRoute(){
+  const h = location.hash.replace(/^#\/?/, "");
+  if (h === "" ) return { screen: "overview", mode: "loaded" };
+  if (h === "empty") return { screen: "overview", mode: "empty" };
+  if (h === "error") return { screen: "overview", mode: "error" };
+  if (h.startsWith("session/")) return { screen: "session", id: h.slice("session/".length) };
+  return { screen: "overview", mode: "loaded" };
+}
+
+function go(){
+  const route = parseRoute();
+  if (route.screen === "overview"){
+    if (route.mode === "empty") return renderOverviewEmpty();
+    if (route.mode === "error") return renderOverviewError();
+    renderOverviewSkeleton();
+    setTimeout(() => renderOverviewLoaded(OVERVIEW_LOADED, false), 420);
+  } else {
+    const s = SESSIONS[route.id];
+    if (!s) { renderSessionSkeleton(); setTimeout(() => renderSession404(route.id), 300); return; }
+    renderSessionSkeleton();
+    setTimeout(() => renderSessionLoaded(s), 380);
+  }
+}
+
+window.addEventListener("hashchange", go);
+go();
+</script>
+</body>
+</html>

@@ -318,3 +318,30 @@ One review addition at the same pass: `facets.worktree_path`
 (`string|null`, self-describing) joins the session view header — the
 attribution ruling made it a first-class session column and the viewer
 should not hide it.
+
+## Amendment 2 (2026-07-17, prototype freeze)
+
+Three variants built against the api.md shapes on identical fixture
+data (`prototypes/` in this directory, retained as design-process
+evidence). **Operator pick: `prototypes/v2-tile-led.html` is the frozen
+design contract** — the KPI hero card with the three-way split as a
+proportional segmented bar, stat tiles beneath, roomy session
+list-rows. Reviews judge all UI work against this file; taste deltas
+after the freeze are operator amendments, not review rounds (Open risk
+3 now has its mechanism).
+
+Frozen with it:
+
+- **ABSENT rendering (UI law):** reasoned-ABSENT (a `null` with an
+  `absences` row) renders as V2's disclosure chip — a visible marker
+  whose recorded reason opens inline, keyboard-operable, no hover
+  dependency. Self-describing nullables render quiet (plain dash /
+  "main checkout"), per api.md B1.3. Loud vs quiet is the distinction;
+  never fabricated either way.
+- **Styling toolchain (routed into the SPA scaffold issue):**
+  Tailwind 4 + shadcn/ui primitives generated from shadcn's own MIT
+  source via its CLI on vite, lucide icons, neutral base —
+  devDependencies only, bundled into static assets at build. The
+  premium reference template stays gitignored and license-walled:
+  visual direction only, zero code reuse — this remains a reviewer
+  check on every UI slice.

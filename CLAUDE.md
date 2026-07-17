@@ -73,13 +73,18 @@ findings section and the decisions log.
   three-way; HTTP seam + one browser flow; api.md + prototype passes
   flagged). CONTEXT.md gained overview / session view /
   verified-failing-unverified / drift banner.
-- Next, in order, before `aeh plan`: (1) api.md pass (data-architect
-  co-author) · (2) one ui-prototyper round → frozen variant · (3) the
-  R10 operator acts — chromium-in-sandbox probe (fixes R9's lane),
-  recording pass on cc 2.1.212 + range-stamp bump, standing pnpm
-  sandbox check, wrap this repo's gates in `cart check` (dogfood
-  evidence for the headline). S2 follow-ups 132–145 are daily-lane
-  candidates. Geography lives in docs/map.md.
+- Done (2026-07-17, same day): api.md pass (binding GET contract,
+  PRD Amendment 1 — port 2278, busy_timeout in the shared read helper,
+  UTC-Z fixture pin) · prototype freeze (PRD Amendment 2 —
+  v2-tile-led is the design contract; ABSENT = disclosure chip;
+  toolchain Tailwind 4 + shadcn CLI primitives on vite; premium
+  template stays gitignored/license-walled, reference only).
+- Next, before `aeh plan`: the R10 operator acts —
+  chromium-in-sandbox probe (fixes R9's lane), recording pass on cc
+  2.1.212 + range-stamp bump, standing pnpm sandbox check, wrap this
+  repo's gates in `cart check` (dogfood evidence for the headline).
+  S2 follow-ups 132–145 are daily-lane candidates. Geography lives in
+  docs/map.md.
 
 ## Repo conventions
 
