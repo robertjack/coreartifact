@@ -38,6 +38,7 @@ import { showCommand } from "./commands/show.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { sendCliPing, awaitPingWithGrace, PING_EXIT_GRACE_MS } from "../ping/index.js";
 import { checkCommand } from "./commands/check.js";
+import { doctorCommand } from "./commands/doctor.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -70,6 +71,11 @@ export const COMMANDS: CommandSpec[] = [
     summary: "Run a named command and record it as spool-borne evidence",
     handler: (args) => checkCommand(args),
   },
+  {
+    name: "doctor",
+    summary: "Report every currently-degrading facet, read-only",
+    handler: () => doctorCommand(),
+  },
 ];
 
 function usage(): string {
@@ -99,9 +105,19 @@ export async function main(argv: string[]): Promise<void> {
   // never adds latency. `.catch` is attached immediately: nothing about
   // this call may ever surface as an unhandled rejection or change the
   // exit code or either stream below.
-  const pingPromise = sendCliPing({ env: process.env }).catch(() => {
-    // never let ping plumbing change a command's outcome
-  });
+  //
+  // `doctor` is the one named exemption (docs/issues/ISS-0021.md: "Doctor
+  // never reads the global operator state and never pings"): sendCliPing
+  // unconditionally calls readState before the consent check even runs,
+  // so wiring it for doctor would make a read-only, network-silent report
+  // both read and write the global root. Every other command still rides
+  // the shared path unchanged.
+  const pingPromise =
+    commandName === "doctor"
+      ? Promise.resolve()
+      : sendCliPing({ env: process.env }).catch(() => {
+          // never let ping plumbing change a command's outcome
+        });
 
   const code = await command.handler(rest);
 
