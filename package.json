@@ -13,7 +13,7 @@
     "cart": "dist/cli/bin.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build",
     "dev": "tsc --watch",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
@@ -24,7 +24,19 @@
   },
   "packageManager": "pnpm@9.15.0",
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
+    "vite": "^8.1.4",
     "vitest": "^4.1.10"
   }
 }
