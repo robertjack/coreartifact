@@ -136,5 +136,12 @@ findings section and the decisions log.
 
 - TypeScript, pnpm (never npm/yarn), vitest; conventions mirror the aeh
   repo. Bins `coreartifact` + `cart` land with PRD-0001.
+- Run gates through the product: `node dist/cli/bin.js check <name> --
+  <cmd>` (typecheck/test/build), not raw. In a headless/delegated
+  session, bind to yourself: read your session id from the spool's last
+  SessionStart line and pass `--session <id>` — that is what makes the
+  session VERIFIED in the dashboard's headline instead of unverified
+  (evidence bound to the session, the product's own thesis). Exit codes
+  pass through, so nothing else changes.
 - Model IDs are exact and pinned (`claude-opus-4-8`, `claude-sonnet-5`) —
   never aliases.
