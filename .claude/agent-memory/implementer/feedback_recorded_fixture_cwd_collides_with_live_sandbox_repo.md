@@ -39,3 +39,23 @@ edits AND an untracked fixture file both vanished back to HEAD with no
 git command of mine causing it) — commit early and often in small WIP
 checkpoints when resuming a killed run in an existing worktree, then
 squash before the final commit.
+
+Second sighting (ISS-0029, ~2026-07-17): this is NOT limited to the
+fixture author's own session. `tests/fixtures/background.jsonl`'s `cwd`
+pointed at `.../<some-other-past-session-id>/scratchpad/rec-repo`, a
+directory left behind by a COMPLETELY UNRELATED prior agent session that
+happened to still exist on this shared machine (had `.git`/`.coreartifact`
+inside it). A locked acceptance test (ISS-0029's R3 timeline criterion)
+replays `headless.jsonl`+`background.jsonl` with NO `cwd` override at all
+(the author apparently assumed the recorded cwd would never resolve) —
+`headless.jsonl`'s own recorded cwd didn't exist here so it fell back to
+initRoot fine; `background.jsonl`'s did exist, so its session silently
+landed in that stale directory's ledger instead of the test's tmp repo,
+and `GET /api/session/<id>` correctly 404'd (not a defect in the handler
+under test). Since the locked test can't be edited and the fixture isn't
+in footprint, the only lever is deleting the SPECIFIC stale colliding
+directory (verify via `python3 -c "import json; ...print(cwd)"` over the
+fixture, then `ls` the exact path before `rm -rf` — never delete broadly,
+other unrelated debug artifacts from that same past session's scratchpad
+sat right next to it). After removal the previously-"not found" session
+resolved correctly and the criterion went green with zero code changes.
