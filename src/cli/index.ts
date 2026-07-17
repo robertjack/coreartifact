@@ -39,6 +39,7 @@ import { uninstallCommand } from "./commands/uninstall.js";
 import { sendCliPing, awaitPingWithGrace, PING_EXIT_GRACE_MS } from "../ping/index.js";
 import { checkCommand } from "./commands/check.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { openCommand } from "./commands/open.js";
 
 export type CommandHandler = (args: string[]) => number | Promise<number>;
 
@@ -75,6 +76,11 @@ export const COMMANDS: CommandSpec[] = [
     name: "doctor",
     summary: "Report every currently-degrading facet, read-only",
     handler: () => doctorCommand(),
+  },
+  {
+    name: "open",
+    summary: "Start the local dashboard server",
+    handler: (args) => openCommand(args),
   },
 ];
 
