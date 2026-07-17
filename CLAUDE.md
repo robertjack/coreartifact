@@ -109,10 +109,16 @@ findings section and the decisions log.
   NEW daily-lane finds: claude-sonnet-5 missing from the price table
   (every worker session's cost reads ABSENT "model unpinned") and the
   `<synthetic>` model-row artifact.
-- Next: (1) optional $1 `aeh do` sandbox smoke to firm R9's lane ·
-  (2) `aeh plan docs/prd/PRD-0003-dashboard/prd.md` → plan gate (hold
-  to the nine-issue sketch). S2s 132–145 daily-lane. Geography in
-  docs/map.md.
+- PRD-0003 CAMPAIGN RUNNING (launched 2026-07-17, gate approved via
+  plan-branch merge 320c91a, Amendment 3 in the PRD): 7 issues, $200,
+  serial dependency order from ISS-0026. Plan-gate repair: shell-App
+  seam (validator caught the decomposer's cycle-inexpressible stub
+  design; aeh's own repair pass had failed on it). globalSetup carries
+  the conditional SPA-build. Operator lane during the run: escalation
+  rescue + re-review per the by-hand protocol; merge only between
+  runner passes. Sandbox smoke skipped — real workers ran clean during
+  the ISS-0025 rescue; R9 fallback stays armed. S2s 132–145 daily-lane.
+  Geography in docs/map.md.
 
 ## Repo conventions
 
