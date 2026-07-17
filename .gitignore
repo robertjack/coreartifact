@@ -12,3 +12,6 @@ dist/
 submodule-source/
 .coreartifact/
 .claude/settings.local.json
+
+# Premium UI template — licensed reference material, must NEVER enter the public history (shadcnblocks license: no redistribution as stock).
+templates/
