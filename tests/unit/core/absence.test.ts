@@ -113,6 +113,50 @@ describe("core/absence", () => {
     expect([...ABSENCE_FACETS].sort()).toEqual(["cost", "kind"]);
   });
 
+  // ISS-0025: the source-demote reason family -- KIND_ABSENCE_REASONS.sourceNotStartup
+  // builds a per-source reason accepted by the same closed-vocabulary
+  // validation as the other kind reasons; MODEL_ABSENT_NO_SOURCE_RECORDED
+  // is the fixed literal for the "no source key at all" case.
+  test("ISS-0025: sourceNotStartup builds a reason accepted by setAbsence's closed-vocabulary check", () => {
+    const handle = openTestLedger();
+    try {
+      setAbsence(handle.db, "sess-clear", "kind", KIND_ABSENCE_REASONS.sourceNotStartup("clear"));
+      const rows = getSessionAbsences(handle.db, "sess-clear");
+      expect(rows).toEqual([
+        { session_id: "sess-clear", facet: "kind", reason: "model absent, source not startup: clear" },
+      ]);
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("ISS-0025: MODEL_ABSENT_NO_SOURCE_RECORDED is a distinct, valid kind reason", () => {
+    const handle = openTestLedger();
+    try {
+      setAbsence(handle.db, "sess-no-source", "kind", KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED);
+      const rows = getSessionAbsences(handle.db, "sess-no-source");
+      expect(rows).toEqual([
+        { session_id: "sess-no-source", facet: "kind", reason: "model absent, no source recorded" },
+      ]);
+      expect(KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED).not.toBe(
+        KIND_ABSENCE_REASONS.NO_SESSION_START_CAPTURED,
+      );
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("ISS-0025: an ad-hoc source-shaped string that does not match the sourceNotStartup prefix is rejected", () => {
+    const handle = openTestLedger();
+    try {
+      expect(() =>
+        setAbsence(handle.db, "sess-bad-source", "kind", "source is weird" as never),
+      ).toThrow();
+    } finally {
+      handle.close();
+    }
+  });
+
   test("readers: one session and across all sessions, with facet and reason intact", () => {
     const handle = openTestLedger();
     try {

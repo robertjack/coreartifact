@@ -58,4 +58,56 @@ describe("classifySessionKind", () => {
     ];
     expect(classifySessionKind(events)).toEqual({ kind: "headless", reason: null });
   });
+
+  // ISS-0025: the source-demote gate (docs/recording-pass.md findings 3 and
+  // 9) -- model absent AND source anything other than "startup" is an
+  // unverified start mode, never classified.
+  describe("ISS-0025: source-demote gate", () => {
+    it("rule 5: SessionStart without model, source 'clear' (the recorded real case) -> ABSENT, naming the source", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: { source: "clear" } }];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.sourceNotStartup("clear"),
+      });
+      expect(classifySessionKind(events).reason).toContain("clear");
+    });
+
+    it("rule 5 wins even with a SessionEnd that would otherwise classify headless -- the source gate runs before the end-reason corroboration", () => {
+      const events: DriftEvent[] = [
+        { hookEventName: "SessionStart", eventObj: { source: "clear" } },
+        { hookEventName: "SessionEnd", eventObj: { reason: "other" } },
+      ];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.sourceNotStartup("clear"),
+      });
+    });
+
+    it("rule 4: SessionStart without model, no source key at all -> ABSENT, no source recorded", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: {} }];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED,
+      });
+    });
+
+    it("a non-string source value is treated the same as a missing source key (never fabricated)", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: { source: 42 } }];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED,
+      });
+    });
+
+    it("rule 2/3 (startup source) are unchanged: source 'startup' still reaches the end-reason corroboration", () => {
+      const contradicted: DriftEvent[] = [
+        { hookEventName: "SessionStart", eventObj: { source: "startup" } },
+        { hookEventName: "SessionEnd", eventObj: { reason: "prompt_input_exit" } },
+      ];
+      expect(classifySessionKind(contradicted)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.MODEL_ABSENT_CONTRADICTED_BY_END_REASON,
+      });
+    });
+  });
 });
