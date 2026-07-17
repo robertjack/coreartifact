@@ -61,14 +61,18 @@ findings section and the decisions log.
   escalations, zero implementation faults in the test-side four; process
   change: mechanically check locked tests against the issue contract
   before dispatch).
-- Next: land the three filed aeh ideas as PRs before PRD-0003 dispatches
-  (locked-test/red-verify reconciliation 40a8c54 + over-pin scan 5dcabf1
-  — the retro's process change; reviewer infra-error→merge S1 71d41aa),
-  then the PRD-0003 grill (dashboard — designed against the now-real
-  ledger; the avoided-cost meter is banked in the spec roadmap for its
-  grill to see). S2 follow-ups 132–145 are daily-lane candidates; a
-  deliberate dogfood `init` on this repo is a good post-ship operator
-  act. Geography lives in docs/map.md.
+- Done (post-retro, 2026-07-17): all three aeh ideas landed as merged
+  PRs (#1 reviewer infra-error→merge S1; #2 locked-test import audit —
+  the retro's process change, four review rounds; #4 plan-time
+  lock-collision scan) — aeh dist rebuilt, next campaign runs all
+  three. Deliberate dogfood `init` live on this repo: capture verified
+  (first session in the ledger), doctor already flagging real drift
+  (cc 2.1.212 vs tested 2.1.208–2.1.211).
+- Next: the PRD-0003 grill, fresh session (dashboard — designed against
+  the now-real ledger with live dogfood data; the avoided-cost meter is
+  banked in the spec roadmap for its grill to see). S2 follow-ups
+  132–145 are daily-lane candidates; pnpm-broken-in-dispatch-sandbox is
+  a standing pre-campaign check. Geography lives in docs/map.md.
 
 ## Repo conventions
 
