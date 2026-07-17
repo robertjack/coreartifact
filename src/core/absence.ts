@@ -29,9 +29,29 @@ export const COST_ABSENCE_REASONS = {
   modelUnpinned: (model: string): `model unpinned: ${string}` => `model unpinned: ${model}`,
 } as const;
 
+// The source-demote family (ISS-0025, docs/recording-pass.md findings 3 and
+// 9): SessionStart with no `model` and a `source` other than "startup" (the
+// recorded real case: "clear") is an unverified start mode -- demote-only,
+// never classify. The reason names the observed source value so it stays
+// derivable purely from the spool (degradation law, docs/gotchas.md #5).
+// `sourceNotStartup` is the builder the drift detector uses for the general
+// case (any observed non-startup source value); the vocabulary object also
+// carries the precomputed literal for the one recorded case ("clear") as a
+// plain string member, mirroring the fixed-literal shape of the other two
+// kind reasons (not COST's parameterized-only pattern) so the closed
+// vocabulary stays a plain set of strings for the recorded case.
+const SOURCE_NOT_STARTUP_PREFIX = "model absent, source not startup: ";
+
+function sourceNotStartupReason(source: string): `${typeof SOURCE_NOT_STARTUP_PREFIX}${string}` {
+  return `${SOURCE_NOT_STARTUP_PREFIX}${source}`;
+}
+
 export const KIND_ABSENCE_REASONS = {
   NO_SESSION_START_CAPTURED: "no SessionStart captured",
   MODEL_ABSENT_CONTRADICTED_BY_END_REASON: "model absent, contradicted by end-reason",
+  MODEL_ABSENT_SOURCE_NOT_STARTUP_CLEAR: sourceNotStartupReason("clear"),
+  MODEL_ABSENT_NO_SOURCE_RECORDED: "model absent, no source recorded",
+  sourceNotStartup: sourceNotStartupReason,
 } as const;
 
 export type CostAbsenceReason =
@@ -41,7 +61,9 @@ export type CostAbsenceReason =
 
 export type KindAbsenceReason =
   | typeof KIND_ABSENCE_REASONS.NO_SESSION_START_CAPTURED
-  | typeof KIND_ABSENCE_REASONS.MODEL_ABSENT_CONTRADICTED_BY_END_REASON;
+  | typeof KIND_ABSENCE_REASONS.MODEL_ABSENT_CONTRADICTED_BY_END_REASON
+  | `model absent, source not startup: ${string}`
+  | typeof KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED;
 
 // Facet -> its own reason type, so a caller passing a "kind" reason for the
 // "cost" facet (or vice versa) fails to typecheck, not just at runtime.
@@ -66,6 +88,7 @@ const COST_REASON_LITERALS: ReadonlySet<string> = new Set([
 const KIND_REASON_LITERALS: ReadonlySet<string> = new Set([
   KIND_ABSENCE_REASONS.NO_SESSION_START_CAPTURED,
   KIND_ABSENCE_REASONS.MODEL_ABSENT_CONTRADICTED_BY_END_REASON,
+  KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED,
 ]);
 
 function isValidReason(facet: string, reason: string): boolean {
@@ -77,7 +100,10 @@ function isValidReason(facet: string, reason: string): boolean {
     );
   }
   if (facet === "kind") {
-    return KIND_REASON_LITERALS.has(reason);
+    return (
+      KIND_REASON_LITERALS.has(reason) ||
+      (reason.startsWith(SOURCE_NOT_STARTUP_PREFIX) && reason.length > SOURCE_NOT_STARTUP_PREFIX.length)
+    );
   }
   return false;
 }

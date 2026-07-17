@@ -12,6 +12,7 @@ import {
   COST_ABSENCE_REASONS,
   KIND_ABSENCE_REASONS,
 } from "../../../src/core/absence.js";
+import { classifySessionKind, type DriftEvent } from "../../../src/ingest/drift.js";
 
 const tmpDirs: string[] = [];
 function makeTmpDir(): string {
@@ -112,6 +113,103 @@ describe("core/absence", () => {
   test("the facet enumeration is exactly cost and kind", () => {
     expect([...ABSENCE_FACETS].sort()).toEqual(["cost", "kind"]);
   });
+
+  // ISS-0025: the source-demote reason family -- KIND_ABSENCE_REASONS.sourceNotStartup
+  // builds a per-source reason accepted by the same closed-vocabulary
+  // validation as the other kind reasons; MODEL_ABSENT_NO_SOURCE_RECORDED
+  // is the fixed literal for the "no source key at all" case.
+  test("ISS-0025: sourceNotStartup builds a reason accepted by setAbsence's closed-vocabulary check", () => {
+    const handle = openTestLedger();
+    try {
+      setAbsence(handle.db, "sess-clear", "kind", KIND_ABSENCE_REASONS.sourceNotStartup("clear"));
+      const rows = getSessionAbsences(handle.db, "sess-clear");
+      expect(rows).toEqual([
+        { session_id: "sess-clear", facet: "kind", reason: "model absent, source not startup: clear" },
+      ]);
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("ISS-0025: MODEL_ABSENT_NO_SOURCE_RECORDED is a distinct, valid kind reason", () => {
+    const handle = openTestLedger();
+    try {
+      setAbsence(handle.db, "sess-no-source", "kind", KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED);
+      const rows = getSessionAbsences(handle.db, "sess-no-source");
+      expect(rows).toEqual([
+        { session_id: "sess-no-source", facet: "kind", reason: "model absent, no source recorded" },
+      ]);
+      expect(KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED).not.toBe(
+        KIND_ABSENCE_REASONS.NO_SESSION_START_CAPTURED,
+      );
+    } finally {
+      handle.close();
+    }
+  });
+
+  test("ISS-0025: an ad-hoc source-shaped string that does not match the sourceNotStartup prefix is rejected", () => {
+    const handle = openTestLedger();
+    try {
+      expect(() =>
+        setAbsence(handle.db, "sess-bad-source", "kind", "source is weird" as never),
+      ).toThrow();
+    } finally {
+      handle.close();
+    }
+  });
+
+  // Review fix round 1 (ISS-0025, S2 #1): the standing invariant this
+  // adversarial matrix locks is "the classifier never emits a reason its
+  // own validator rejects" -- classifySessionKind (src/ingest/drift.ts) and
+  // setAbsence's isValidReason (this file) live in different files and
+  // drifted apart once already (an empty-string source produced the bare
+  // "model absent, source not startup: " reason, which the validator's
+  // `reason.length > PREFIX.length` check rejects -- setAbsence throws
+  // INSIDE the ingest transaction, the fold rolls back and re-throws on
+  // every subsequent re-ingest, and the whole repo's ledger reads zero
+  // sessions forever after). Every cell below drives classifySessionKind's
+  // real output straight into the real setAbsence against a real ledger and
+  // asserts it never throws -- this is the end-to-end boundary check, not a
+  // unit test of either side in isolation.
+  const adversarialSourceMatrix: Array<{ label: string; eventObj: Record<string, unknown> }> = [
+    { label: "missing source key entirely", eventObj: {} },
+    { label: "empty string source", eventObj: { source: "" } },
+    { label: "the recorded real case: 'clear'", eventObj: { source: "clear" } },
+    { label: "'resume'", eventObj: { source: "resume" } },
+    { label: "'compact'", eventObj: { source: "compact" } },
+    { label: "a string with control chars/newlines", eventObj: { source: "a\nb\x00c" } },
+    {
+      label: "a string equal to the sourceNotStartup prefix itself",
+      eventObj: { source: "model absent, source not startup: " },
+    },
+    { label: "a non-string number", eventObj: { source: 42 } },
+    { label: "a non-string null", eventObj: { source: null } },
+    { label: "a non-string boolean", eventObj: { source: true } },
+    { label: "a non-string array", eventObj: { source: ["clear"] } },
+  ];
+
+  test.each(adversarialSourceMatrix)(
+    "ISS-0025 invariant: classifier never emits a reason its own validator rejects -- $label",
+    ({ eventObj }) => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj }];
+      const classification = classifySessionKind(events);
+      // Every cell in this matrix has no `model` key, so classification
+      // must always demote to ABSENT -- this is itself part of the
+      // invariant under test (a passing kind would mean the matrix stopped
+      // exercising the demote gate at all).
+      expect(classification.kind, "test setup invariant: this matrix must always demote").toBeNull();
+      if (classification.kind !== null) return;
+
+      const handle = openTestLedger();
+      try {
+        expect(() =>
+          setAbsence(handle.db, "sess-adversarial-matrix", "kind", classification.reason),
+        ).not.toThrow();
+      } finally {
+        handle.close();
+      }
+    },
+  );
 
   test("readers: one session and across all sessions, with facet and reason intact", () => {
     const handle = openTestLedger();
