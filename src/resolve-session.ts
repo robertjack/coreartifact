@@ -29,12 +29,19 @@ interface SqliteStatement {
 }
 interface SqliteDatabase {
   prepare(sql: string): SqliteStatement;
+  exec(sql: string): void;
   close(): void;
 }
 const DatabaseSync = DatabaseSyncCtor as unknown as new (
   path: string,
   options?: { readOnly?: boolean },
 ) => SqliteDatabase;
+
+// api.md Flag 1 / R5: every read connection the API opens must set
+// busy_timeout so a concurrent writer never surfaces "database is locked" —
+// reused from src/core/ledger.ts's own BUSY_TIMEOUT_MS value (5000), not
+// re-declared as a separate number that could drift from it.
+export const READ_BUSY_TIMEOUT_MS = 5000;
 
 // Hand-rolled join: same rationale as src/core/paths.ts and
 // src/cli/commands/log.ts — this file owns no shared path-join module.
@@ -59,9 +66,28 @@ export interface RepoVisit {
   report: IngestReport;
 }
 
+// One entry per registered root actually walked — the structured
+// counterpart to `warnings` (a human-readable string), added for the
+// overview endpoint's `repos` field (api.md Surface C), which needs the
+// root + status + reason as data, not a rendered sentence to re-parse.
+export interface RepoStatus {
+  root: string;
+  status: "ok" | "unreadable";
+  reason?: string;
+}
+
 export interface RegisteredRepoWalk {
   registeredRoots: string[];
   warnings: string[];
+  repoStatuses: RepoStatus[];
+}
+
+export interface WalkRegisteredReposOptions {
+  // Scopes the walk to exactly this one registered root (api.md `?repo=`
+  // scoping, Surface C/D) — the caller is responsible for having already
+  // confirmed the root is registered (a 404 `repo_not_registered` decision
+  // lives at the HTTP layer, not here).
+  onlyRoot?: string;
 }
 
 // Walks every registered repo: reachability check, lazy ingest (per repo,
@@ -71,14 +97,20 @@ export interface RegisteredRepoWalk {
 // applied to the loop itself, same as log.ts's own contract).
 export async function walkRegisteredRepos(
   onRepo: (visit: RepoVisit) => void | Promise<void>,
+  options: WalkRegisteredReposOptions = {},
 ): Promise<RegisteredRepoWalk> {
   const registry = await readRegistry();
-  const registeredRoots = [...registry.keys()];
+  const allRoots = [...registry.keys()];
+  const registeredRoots =
+    options.onlyRoot !== undefined ? allRoots.filter((root) => root === options.onlyRoot) : allRoots;
   const warnings: string[] = [];
+  const repoStatuses: RepoStatus[] = [];
 
   for (const repoRoot of registeredRoots) {
     if (!isRepoReachable(repoRoot)) {
-      warnings.push(renderRepoUnavailable(repoRoot, "repo root or .coreartifact/ not found on disk"));
+      const reason = "repo root or .coreartifact/ not found on disk";
+      warnings.push(renderRepoUnavailable(repoRoot, reason));
+      repoStatuses.push({ root: repoRoot, status: "unreadable", reason });
       continue;
     }
 
@@ -86,7 +118,12 @@ export async function walkRegisteredRepos(
       const report = await ingest(repoRoot);
       const paths = getPaths(repoRoot);
       const db = new DatabaseSync(paths.ledger, { readOnly: true });
+      // R5 (api.md Flag 1): every read connection the API opens sets
+      // busy_timeout so a concurrent writer never surfaces "database is
+      // locked" — this is the one shared place that amendment lands.
+      db.exec(`PRAGMA busy_timeout = ${READ_BUSY_TIMEOUT_MS}`);
       try {
+        repoStatuses.push({ root: repoRoot, status: "ok" });
         await onRepo({ repoRoot, db, report });
       } finally {
         db.close();
@@ -94,10 +131,11 @@ export async function walkRegisteredRepos(
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       warnings.push(renderRepoUnavailable(repoRoot, reason));
+      repoStatuses.push({ root: repoRoot, status: "unreadable", reason });
     }
   }
 
-  return { registeredRoots, warnings };
+  return { registeredRoots, warnings, repoStatuses };
 }
 
 // The short id `log` prints (src/render/log.ts's own `shortId`, an 8-char

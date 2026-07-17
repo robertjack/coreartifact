@@ -5,6 +5,8 @@
 // empty-shaped stub handlers so the server is green and the GET wall is
 // testable before either endpoint lands.
 
+import { overviewHandler } from "./overview.js";
+
 export interface DashboardRequest {
   method?: string;
   url?: string;
@@ -21,11 +23,6 @@ export type ApiHandler = (
   params: Record<string, string>,
 ) => ApiResult | Promise<ApiResult>;
 
-// ISS-0028 replaces this stub with the real GET /api/overview handler.
-function overviewStub(): ApiResult {
-  return { status: 200, body: {} };
-}
-
 // ISS-0029 replaces this stub with the real GET /api/session/<id> handler.
 function sessionStub(): ApiResult {
   return { status: 200, body: {} };
@@ -38,7 +35,7 @@ interface ApiRoute {
 }
 
 const API_ROUTES: ApiRoute[] = [
-  { pattern: /^\/api\/overview\/?$/, paramNames: [], handler: overviewStub },
+  { pattern: /^\/api\/overview\/?$/, paramNames: [], handler: overviewHandler },
   { pattern: /^\/api\/session\/([^/]+)\/?$/, paramNames: ["id"], handler: sessionStub },
 ];
 
