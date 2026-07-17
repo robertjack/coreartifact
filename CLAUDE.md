@@ -98,11 +98,21 @@ findings section and the decisions log.
   amended — gotcha #7's second sighting, caught by the dogfood check
   loop). F10: TaskOutput not guaranteed on .212 → backgrounded outcome
   commonly ABSENT, honest; notification-prompt join = register note.
-- Next: (1) `aeh do` the kind-classifier fix (spec in
-  docs/issues/, drafted) · (2) optional $1 `aeh do` sandbox smoke to
-  firm R9's lane · (3) `aeh plan docs/prd/PRD-0003-dashboard/prd.md` →
-  plan gate (hold to the nine-issue sketch). S2s 132–145 daily-lane.
-  Geography in docs/map.md.
+- ISS-0025 MERGED (2026-07-17, fa88093): kind demote-only on
+  non-startup sources. Budget-killed `aeh do` ($4 s-tier too small) →
+  by-hand rescue per protocol (runner's locked tests preserved; two
+  S2s found by review on a green suite — empty-string poison-pill +
+  untested embedding — fixed with mutation proofs; merged with full
+  side effects). Execution-proven: live ledger rebuild flipped this
+  repo's /clear session to ABSENT-with-reason. Upstream: run-issue
+  resume gap + mislabeled infra_failure detail filed (aeh 27299f5).
+  NEW daily-lane finds: claude-sonnet-5 missing from the price table
+  (every worker session's cost reads ABSENT "model unpinned") and the
+  `<synthetic>` model-row artifact.
+- Next: (1) optional $1 `aeh do` sandbox smoke to firm R9's lane ·
+  (2) `aeh plan docs/prd/PRD-0003-dashboard/prd.md` → plan gate (hold
+  to the nine-issue sketch). S2s 132–145 daily-lane. Geography in
+  docs/map.md.
 
 ## Repo conventions
 
