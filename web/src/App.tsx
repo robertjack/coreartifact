@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
+import Overview from "./views/Overview";
 
-// Shell only (plan-gate repair, 2026-07-17): this file owns the dashboard
+// Shell (plan-gate repair, 2026-07-17): this file owns the dashboard
 // chrome and a tiny client-side router with exactly two routes — the
-// overview ("/") and the session view ("/session/:id"). It must NEVER
-// import web/src/views/** — each UI issue owns its own view file and wires
-// its own route here (a `touches` in THEIR footprint, authorized by their
-// dependency on this issue). Until then, every route renders the same
-// inline not-yet-wired placeholder so this builds green on its own.
+// overview ("/") and the session view ("/session/:id"). Each UI issue
+// owns its own view file and wires its own route here (a `touches` in
+// THEIR footprint, authorized by their dependency on this issue). The
+// session route still renders the placeholder until its issue lands.
 
 function usePathname(): string {
   const [pathname, setPathname] = useState(() => window.location.pathname);
@@ -42,7 +42,7 @@ export default function App() {
   let content: React.ReactNode;
   switch (matched.route) {
     case "overview":
-      content = <NotYetWired label="Overview" />;
+      content = <Overview />;
       break;
     case "session":
       content = <NotYetWired label={`Session view (${matched.sessionId})`} />;
