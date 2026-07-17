@@ -1,0 +1,1 @@
+- [Footprints, locked surfaces, issue sizing](feedback_footprint_locked_surfaces_sizing.md) — facet slices need the render/CLI seam in footprint; scan plans for locked-test collisions; one contract per issue; operator-lane prerequisites before dispatch.

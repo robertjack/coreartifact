@@ -54,21 +54,21 @@ findings section and the decisions log.
 
 - Done: spec confirmed (2026-07-12) · hooks smoke test (2026-07-13,
   findings in spec) · scaffold + `aeh init` + `aeh upgrade` (2026-07-13) ·
-  PRD-0001 walking skeleton shipped (2026-07-15; 12 issues, $149.04 of
-  $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md) ·
-  PRD-0002 evidence depth drafted (2026-07-15; $150; grill record in
-  docs/prd/PRD-0002-evidence-depth/prd.md).
-- Done (added): PRD-0002 evidence depth SHIPPED (2026-07-17; 12
-  issues, $134.71 of $200 aeh-side; integration review closed 3 S1
-  cross-issue seams, 9 S2 follow-ups logged in the findings table).
-  Five escalations — four test-side (module-path guesses ×2,
-  over-pinned locks ×2, now gotchas #7), one real-bug round ceiling;
-  two aeh harness bugs filed upstream (test-author/footprint
-  reconciliation; reviewer infra-error falls through to merge — S1).
-- Next: `/aeh-retro` for PRD-0002, then the PRD-0003 grill (dashboard —
-  designed against the now-real ledger; the avoided-cost meter is
-  banked in the spec roadmap for its grill to see). S2 follow-ups
-  132–145 are daily-lane candidates. Geography lives in docs/map.md.
+  PRD-0001 walking skeleton shipped (2026-07-15; retro at
+  docs/prd/PRD-0001-walking-skeleton/retro.md) · PRD-0002 evidence depth
+  shipped (2026-07-17; 12 issues, $134.71 of $200 aeh-side) with retro
+  done (2026-07-17; docs/prd/PRD-0002-evidence-depth/retro.md — seven
+  escalations, zero implementation faults in the test-side four; process
+  change: mechanically check locked tests against the issue contract
+  before dispatch).
+- Next: land the three filed aeh ideas as PRs before PRD-0003 dispatches
+  (locked-test/red-verify reconciliation 40a8c54 + over-pin scan 5dcabf1
+  — the retro's process change; reviewer infra-error→merge S1 71d41aa),
+  then the PRD-0003 grill (dashboard — designed against the now-real
+  ledger; the avoided-cost meter is banked in the spec roadmap for its
+  grill to see). S2 follow-ups 132–145 are daily-lane candidates; a
+  deliberate dogfood `init` on this repo is a good post-ship operator
+  act. Geography lives in docs/map.md.
 
 ## Repo conventions
 
