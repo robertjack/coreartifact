@@ -302,6 +302,17 @@ ping) AND ≥3 unprompted asks for sync/team.
 
 Graduating layers, each with its own gate: **v1.1** second adapter (Codex
 CLI — the schema-neutrality proof), `init --global` (on many-repo pain),
+**worktree auto-propagation** (added 2026-07-17, post-PRD-0003 ship): a
+git `post-checkout` hook installed by init in the common git dir, copying
+the settings file into every newly created worktree — the one mechanism
+that covers all creators (human, aeh, Claude Code) without touching
+WorktreeCreate (a delegation hook — subscribing it breaks agent spawns;
+recording-pass finding 1) or the capture hot path or ingest's R8
+zero-footprint wall. Constraints inherited: always exit 0, compose with
+existing hook managers (lefthook) rather than clobber, uninstall's
+byte-identical inversion extends to it. Gate: the worktree-gap warning
+firing repeatedly in real use (same pain signal as `init --global` —
+whichever fires first at the retro grill wins the slot),
 and **`coreartifact record`** (the recording protocol as a command — the
 maintenance loop's highest-leverage investment; gate: the first release
 where re-recording by runbook is felt as a chore) · **v2** prompt-surface
