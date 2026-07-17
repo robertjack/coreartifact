@@ -345,3 +345,21 @@ Frozen with it:
   premium reference template stays gitignored and license-walled:
   visual direction only, zero code reuse — this remains a reviewer
   check on every UI slice.
+
+## Amendment 3 (2026-07-17, plan gate)
+
+Gate APPROVED on the repaired plan branch (ad7ef0e). The decomposer
+compiled seven issues against the nine-issue sketch — two sanctioned
+consolidations (server core + `open` command; browser harness + R9
+flow); risk tags match the sketch everywhere they overlap; 42 criteria,
+each single-owner. One validator catch, repaired at the gate: the
+scaffold's stub-seam design (touches on its dependents' owns) was
+cycle-inexpressible — repaired to the shell-App seam (each view issue
+wires its own route; ISS-0031 sequenced after ISS-0030 on the shared
+App.tsx touch), frontmatter and db deps together. Hand-run
+lock-collision scan clean (aeh's own scan was skipped by the failed
+validation — noted upstream-worthy). Operator pre-dispatch item landed:
+the acceptance harness globalSetup gains a conditional SPA-build step
+(no-op until the scaffold merges). R9 dispatches to workers per the
+probe ruling; the operator-lane fallback stays armed. Budget $200
+stands; complexity caps sum to $115.
