@@ -109,21 +109,28 @@ findings section and the decisions log.
   NEW daily-lane finds: claude-sonnet-5 missing from the price table
   (every worker session's cost reads ABSENT "model unpinned") and the
   `<synthetic>` model-row artifact.
-- PRD-0003 CAMPAIGN PAUSED CLEANLY (2026-07-17 ~20:20Z, operator login
-  switch): 5/7 MERGED (0026 scaffold · 0027 server · 0028 overview
-  endpoint, rescued test-only after an environmental locked-test
-  collision, record in its issue file · 0030 overview UI · 0031
-  session UI), $77 of $200 spent, states reconciled. ISS-0029 was
-  mid-ladder (its ISS-0028-class fixture-pin note is in its packet;
-  test_author_defect was caught mechanically and repaired in-ladder —
-  the PRD-0002 process change working); reset to queued with branch
-  cleaned per re-entry protocol (re-pays its ~$10 test-author, the
-  filed stage-aware-resume aeh idea is exactly this). ISS-0032 queued.
-  RESUME = `node ~/dev/aeh/dist/index.js run PRD-0003` (prds.state is
-  'running'; if a fresh run balks, check states per aeh-retro-by-hand
-  memory). Then: ship gate = integration review with the
-  verbatim-replay latent-class S2 (findings table, ISS-0028 followup)
-  as named input. S2s 132–145 daily-lane. Geography in docs/map.md.
+- PRD-0003 SHIPPED (2026-07-17, ship gate approved ~23:15Z): 7/7
+  merged, $94.31 of $200. Runner carried 5 autonomously; 0028 + 0029
+  landed via by-hand escalation protocol — both test-side, zero
+  implementation faults (0028: environmental fixture collision, pin
+  amendment; 0029: stub-200 made R8 vacuous + waitForExit race + two
+  review-S2 test gaps — four test-only amendments, all
+  mutation-proven). Integration review: SHIP, all nine requirements
+  verified live (playwright + SQL + seam), invariants hold, four
+  carried finding classes resolved, five S3 residuals in the findings
+  table (F1 busy_timeout triple-literal + F3 UI-swallowed error bodies
+  = daily-lane). Dashboard verified on the live ledger: honest "0 of
+  35 verified" headline (checks bind to kind-NULL operator sessions —
+  demo-optics note: seed one headless session with a bound check
+  before showing anyone; aeh-workers-wrap-gates-in-cart-check is the
+  real fix and an aeh integration idea).
+- Next: PRD-0003 retro (fresh session, house practice; inputs — two
+  rescues, the flake trilogy incl. runner pre-flight bypass after
+  double-green, stub-200 decomposer lesson, stage-aware-resume +
+  memory-merge + gate-stdout aeh ideas filed 27299f5, sonnet-5 price
+  table gap). Then launch acts (spec list): README, LICENSE/NOTICE,
+  SECURITY.md, CI, ping receiver, write-up, the flip. S2s 132–145 +
+  S3s F1/F3 daily-lane. Geography in docs/map.md.
 
 ## Repo conventions
 
