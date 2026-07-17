@@ -68,11 +68,18 @@ findings section and the decisions log.
   three. Deliberate dogfood `init` live on this repo: capture verified
   (first session in the ledger), doctor already flagging real drift
   (cc 2.1.212 vs tested 2.1.208–2.1.211).
-- Next: the PRD-0003 grill, fresh session (dashboard — designed against
-  the now-real ledger with live dogfood data; the avoided-cost meter is
-  banked in the spec roadmap for its grill to see). S2 follow-ups
-  132–145 are daily-lane candidates; pnpm-broken-in-dispatch-sandbox is
-  a standing pre-campaign check. Geography lives in docs/map.md.
+- Done (2026-07-17): PRD-0003 grill — twelve rulings, $200 budget,
+  prd.md at docs/prd/PRD-0003-dashboard/ (headline = verified-delegation
+  three-way; HTTP seam + one browser flow; api.md + prototype passes
+  flagged). CONTEXT.md gained overview / session view /
+  verified-failing-unverified / drift banner.
+- Next, in order, before `aeh plan`: (1) api.md pass (data-architect
+  co-author) · (2) one ui-prototyper round → frozen variant · (3) the
+  R10 operator acts — chromium-in-sandbox probe (fixes R9's lane),
+  recording pass on cc 2.1.212 + range-stamp bump, standing pnpm
+  sandbox check, wrap this repo's gates in `cart check` (dogfood
+  evidence for the headline). S2 follow-ups 132–145 are daily-lane
+  candidates. Geography lives in docs/map.md.
 
 ## Repo conventions
 

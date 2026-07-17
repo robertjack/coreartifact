@@ -71,3 +71,22 @@ and no synonyms. Created 2026-07-14 during the PRD-0001 grill.
   `~/.coreartifact/` holding install id, consent, and last-ping time;
   same append-and-fold pattern as the registry, no read-modify-write.
   Per-repo uninstall never touches it.
+- **overview** — the dashboard's landing view: the cross-repo union the
+  spec called the "today" view (this name supersedes it), carrying the
+  verified-delegation headline, the tiles, the session list, and the
+  drift banner. Added 2026-07-17, PRD-0003 grill.
+- **session view** — the dashboard's per-session page: facet header,
+  check badges, test results, footprint, absences with reasons, flat
+  timeline. Added 2026-07-17, PRD-0003 grill.
+- **verified / failing / unverified** — the canonical three-way
+  classification of a session by its bound checks: verified = ≥1 bound
+  check and no failing bound check; failing = ≥1 failing bound check
+  (exit ≠ 0); unverified = no bound checks. The headline KPI applies it
+  to kind=`headless` sessions in a rolling 7-day local window; kind
+  ABSENT is excluded from the denominator and surfaced separately,
+  never silently folded. Added 2026-07-17, PRD-0003 grill.
+- **drift banner** — the overview element naming in-window sessions
+  whose recorded cc_version falls outside the tested range;
+  ledger-derived only (the server never executes `claude`), fired on
+  positive evidence only — a NULL version never triggers it. Added
+  2026-07-17, PRD-0003 grill.
