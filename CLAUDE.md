@@ -109,16 +109,21 @@ findings section and the decisions log.
   NEW daily-lane finds: claude-sonnet-5 missing from the price table
   (every worker session's cost reads ABSENT "model unpinned") and the
   `<synthetic>` model-row artifact.
-- PRD-0003 CAMPAIGN RUNNING (launched 2026-07-17, gate approved via
-  plan-branch merge 320c91a, Amendment 3 in the PRD): 7 issues, $200,
-  serial dependency order from ISS-0026. Plan-gate repair: shell-App
-  seam (validator caught the decomposer's cycle-inexpressible stub
-  design; aeh's own repair pass had failed on it). globalSetup carries
-  the conditional SPA-build. Operator lane during the run: escalation
-  rescue + re-review per the by-hand protocol; merge only between
-  runner passes. Sandbox smoke skipped — real workers ran clean during
-  the ISS-0025 rescue; R9 fallback stays armed. S2s 132–145 daily-lane.
-  Geography in docs/map.md.
+- PRD-0003 CAMPAIGN PAUSED CLEANLY (2026-07-17 ~20:20Z, operator login
+  switch): 5/7 MERGED (0026 scaffold · 0027 server · 0028 overview
+  endpoint, rescued test-only after an environmental locked-test
+  collision, record in its issue file · 0030 overview UI · 0031
+  session UI), $77 of $200 spent, states reconciled. ISS-0029 was
+  mid-ladder (its ISS-0028-class fixture-pin note is in its packet;
+  test_author_defect was caught mechanically and repaired in-ladder —
+  the PRD-0002 process change working); reset to queued with branch
+  cleaned per re-entry protocol (re-pays its ~$10 test-author, the
+  filed stage-aware-resume aeh idea is exactly this). ISS-0032 queued.
+  RESUME = `node ~/dev/aeh/dist/index.js run PRD-0003` (prds.state is
+  'running'; if a fresh run balks, check states per aeh-retro-by-hand
+  memory). Then: ship gate = integration review with the
+  verbatim-replay latent-class S2 (findings table, ISS-0028 followup)
+  as named input. S2s 132–145 daily-lane. Geography in docs/map.md.
 
 ## Repo conventions
 
