@@ -203,6 +203,6 @@
   "driftNotes": [
     "Repair pass only touched footprints and the harness-amendment routing; no code/store contradictions were newly detected (no fresh read-only pass was run).",
     "The globalSetup SPA-build amendment (tests/acceptance/harness/globalSetup.ts) is now routed as an operator pre-dispatch MAIN hand-edit rather than an issue footprint, because tests/acceptance/harness/ is shared prior-art harness infrastructure that lies outside every issue's own acceptance directory; it must land on MAIN before ISS-0027/0028/0029/0032 dispatch.",
-    "ISS-0026 creates the two router stub views (web/src/views/Overview.tsx, web/src/views/Session.tsx) under touches; their durable owners are ISS-0030/ISS-0031, which replace them — the scaffold-stub-then-replace seam, modeled as touches-vs-owns to keep ownership single."
+    "SUPERSEDED by plan-gate repair ad7ef0e (operator, 2026-07-17): the scaffold-stub-then-replace seam was validator-inexpressible (touches on a dependent's owns = cycle edges). Repaired: App.tsx ships as a shell with no view imports; ISS-0030/ISS-0031 each wire their own route (touches web/src/App.tsx, authorized by their edge to ISS-0026); ISS-0031 additionally depends on ISS-0030 to serialize the shared touch. Frontmatter and db deps updated together."
   ]
 }
