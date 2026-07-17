@@ -39,10 +39,21 @@ function hasModelKey(eventObj: unknown): boolean {
   return typeof (eventObj as Record<string, unknown>).model === "string";
 }
 
+// Review S2 #1 (ISS-0025 fix round 1): an empty-string `source` is folded to
+// undefined, the same as a missing key or a non-string value -- an unnameable
+// source is unnameable regardless of WHY it can't be named. Without this, a
+// SessionStart with `source: ""` would build the bare
+// "model absent, source not startup: " reason (nothing after the prefix),
+// which the closed-vocabulary validator (src/core/absence.ts's
+// `reason.length > SOURCE_NOT_STARTUP_PREFIX.length` check) rejects --
+// setAbsence throws INSIDE the ingest transaction, the fold rolls back and
+// re-throws, and the whole repo's ledger reads zero sessions forever after
+// (re-thrown on every re-ingest). Folding "" to undefined here means it
+// never reaches the reason-building branch at all.
 function sourceOf(eventObj: unknown): string | undefined {
   if (typeof eventObj !== "object" || eventObj === null || Array.isArray(eventObj)) return undefined;
   const source = (eventObj as Record<string, unknown>).source;
-  return typeof source === "string" ? source : undefined;
+  return typeof source === "string" && source.length > 0 ? source : undefined;
 }
 
 function endReasonOf(eventObj: unknown): string | undefined {
@@ -60,8 +71,9 @@ function endReasonOf(eventObj: unknown): string | undefined {
 //   3. SessionStart present without `model`, source "startup", contradicted
 //      by end-reason "prompt_input_exit" -> ABSENT,
 //      "model absent, contradicted by end-reason".
-//   4. SessionStart present without `model`, source missing entirely ->
-//      ABSENT, "model absent, no source recorded".
+//   4. SessionStart present without `model`, source missing entirely OR an
+//      empty string (unnameable either way) -> ABSENT,
+//      "model absent, no source recorded".
 //   5. SessionStart present without `model`, source present but not
 //      "startup" (e.g. "clear") -> ABSENT, naming the observed source.
 //      Demote-only: never classify an unobserved start mode from n=1.

@@ -109,5 +109,52 @@ describe("classifySessionKind", () => {
         reason: KIND_ABSENCE_REASONS.MODEL_ABSENT_CONTRADICTED_BY_END_REASON,
       });
     });
+
+    // Review fix round 1, S2 #1: an empty-string `source` is unnameable the
+    // same way a missing key or a non-string value is -- it must fold to
+    // MODEL_ABSENT_NO_SOURCE_RECORDED, never to the bare
+    // "model absent, source not startup: " (nothing after the prefix),
+    // which the closed-vocabulary validator in src/core/absence.ts rejects
+    // (`reason.length > PREFIX.length`). Getting this wrong throws INSIDE
+    // the ingest transaction and wedges the whole repo's ledger permanently
+    // (execution-proven by the adversarial reviewer -- a regression against
+    // main, which classified "" -> headless without throwing).
+    it("review fix round 1: SessionStart with source '' (empty string) folds to no-source-recorded, never the bare prefix", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: { source: "" } }];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: KIND_ABSENCE_REASONS.MODEL_ABSENT_NO_SOURCE_RECORDED,
+      });
+    });
+
+    // Review fix round 1, S2 #2: every existing assertion used source
+    // "clear", which happens to equal the precomputed
+    // MODEL_ABSENT_SOURCE_NOT_STARTUP_CLEAR constant -- a builder that
+    // ignores its argument and always returns the "clear" literal would
+    // still pass those. These assertions hardcode the expected string
+    // independently of KIND_ABSENCE_REASONS.sourceNotStartup itself (never
+    // call the builder to compute the expected value) so an
+    // argument-ignoring mutant is caught.
+    it("review fix round 1: the reason embeds the ACTUAL observed source value ('resume'), not a fixed literal", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: { source: "resume" } }];
+      expect(classifySessionKind(events)).toEqual({
+        kind: null,
+        reason: "model absent, source not startup: resume",
+      });
+    });
+
+    it("review fix round 1: the reason embeds the ACTUAL observed source value ('compact'), not a fixed literal", () => {
+      const events: DriftEvent[] = [{ hookEventName: "SessionStart", eventObj: { source: "compact" } }];
+      const result = classifySessionKind(events);
+      expect(result).toEqual({
+        kind: null,
+        reason: "model absent, source not startup: compact",
+      });
+      // Distinctness against the "clear" and "resume" cells directly, so a
+      // builder collapsed to any single fixed literal is caught regardless
+      // of which literal it collapsed to.
+      expect(result.reason).not.toBe("model absent, source not startup: clear");
+      expect(result.reason).not.toBe("model absent, source not startup: resume");
+    });
   });
 });
