@@ -58,16 +58,17 @@ findings section and the decisions log.
   $150; retro at docs/prd/PRD-0001-walking-skeleton/retro.md) ·
   PRD-0002 evidence depth drafted (2026-07-15; $150; grill record in
   docs/prd/PRD-0002-evidence-depth/prd.md).
-- Now: PRD-0002 DISPATCHED (2026-07-16) — schema v2 co-authored, plan
-  compiled (12 issues, ISS-0013–0024), plan gate APPROVED after three
-  repairs (oracle-verified price table pinned in ISS-0019; edge fixes
-  in ISS-0020/0023), budget raised to $200 at the gate (p90 ruling).
-  `aeh run PRD-0002` drives the issues serially; watch via
-  `node ~/dev/aeh/dist/index.js status` / `why PRD-0002`. Recording
-  pass findings 6–8 in docs/recording-pass.md; tested range
-  2.1.208–2.1.211. Roles can write `.claude/agent-memory/<own
-  role>/**` mid-issue (aeh 704d6b5). The npm name is reserved
-  (2026-07-15). Geography lives in docs/map.md.
+- Done (added): PRD-0002 evidence depth SHIPPED (2026-07-17; 12
+  issues, $134.71 of $200 aeh-side; integration review closed 3 S1
+  cross-issue seams, 9 S2 follow-ups logged in the findings table).
+  Five escalations — four test-side (module-path guesses ×2,
+  over-pinned locks ×2, now gotchas #7), one real-bug round ceiling;
+  two aeh harness bugs filed upstream (test-author/footprint
+  reconciliation; reviewer infra-error falls through to merge — S1).
+- Next: `/aeh-retro` for PRD-0002, then the PRD-0003 grill (dashboard —
+  designed against the now-real ledger; the avoided-cost meter is
+  banked in the spec roadmap for its grill to see). S2 follow-ups
+  132–145 are daily-lane candidates. Geography lives in docs/map.md.
 
 ## Repo conventions
 
