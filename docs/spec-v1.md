@@ -303,9 +303,20 @@ CLI — the schema-neutrality proof), `init --global` (on many-repo pain),
 and **`coreartifact record`** (the recording protocol as a command — the
 maintenance loop's highest-leverage investment; gate: the first release
 where re-recording by runbook is felt as a chore) · **v2** prompt-surface
-evals + locked-acceptance workflow (need the corpus v1 accretes) and the
-session tree view (pure UI over captured keys) · **post-gate** the hosted
-trust layer.
+evals + locked-acceptance workflow (need the corpus v1 accretes), the
+session tree view (pure UI over captured keys), and the **avoided-cost
+meter** (added 2026-07-16, operator ruling): a per-event ROI ledger over
+data v1 already captures — caught claim/check divergences priced at a
+conservative multiplier of the originating session's recorded cost,
+`show` deep-dives priced as the transcript re-read they replace,
+rescue-vs-rerun priced from the ledger's own attempt costs; multipliers
+self-calibrate from observed rework sessions over time. HARD CONSTRAINT:
+it is an estimate surface, never an evidence surface — separate view,
+loudly labeled derived, every line item linked to its triggering
+recorded event with the formula and assumptions exposed; the deterrence
+effect is deliberately unquantified. Gate: the first unprompted user
+request for cost/value reporting (or the expand-gate pitch needing it) ·
+**post-gate** the hosted trust layer.
 
 ## Launch posture
 
