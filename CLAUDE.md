@@ -79,11 +79,21 @@ findings section and the decisions log.
   v2-tile-led is the design contract; ABSENT = disclosure chip;
   toolchain Tailwind 4 + shadcn CLI primitives on vite; premium
   template stays gitignored/license-walled, reference only).
-- Next, before `aeh plan`: the R10 operator acts —
-  chromium-in-sandbox probe (fixes R9's lane), recording pass on cc
-  2.1.212 + range-stamp bump, standing pnpm sandbox check, wrap this
-  repo's gates in `cart check` (dogfood evidence for the headline).
-  S2 follow-ups 132–145 are daily-lane candidates. Geography lives in
+- R10 status (2026-07-17): (d) DONE — gates wrapped in `cart check`,
+  four checks bound in the live ledger (typecheck ✓ / test ✗ / test ✓ /
+  build ✓; the ✗ is a one-off stale-dist mismatch during the wrapped
+  run, full output captured at checks line 289 — daily-lane item,
+  unreproduced twice after). (a)+(c) probed GREEN in an
+  implementer-agent sandbox (pnpm store + typecheck clean; playwright
+  1.61.1 chromium screenshot clean) — an approximation of the real aeh
+  worker; a cheap `aeh do` smoke remains the definitive confirmation.
+  R9 provisionally dispatch-lane, fallback armed.
+- Next, the one blocking act before `aeh plan`: (b) the recording pass
+  on cc 2.1.212 + range-stamp bump — now with a live lead: THIS
+  interactive session ingested as kind=headless (SessionStart on
+  2.1.212 appears to drop `model`, the fragile-register signal firing;
+  confirm via protocol, record dated in the spec findings). S2
+  follow-ups 132–145 are daily-lane candidates. Geography lives in
   docs/map.md.
 
 ## Repo conventions
