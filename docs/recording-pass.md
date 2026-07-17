@@ -260,3 +260,104 @@ anything else → version ABSENT.
 Fixtures now span **2.1.208–2.1.211** (streams on .209 and .211;
 smoke-test observations on .208). The spec's Compatibility stance range
 is bumped accordingly.
+
+---
+
+# Recording pass PRD-0003 — findings (2026-07-17)
+
+Recorded on **Claude Code 2.1.212**, macOS, driven from an assistant
+session per the PRD-0002 nested-agent protocol variant (scoped
+`--allowedTools`, `CLAUDE*` env unset, per-scenario `REC_STREAM`).
+Recorder: the production nine-event `jq -c` O_APPEND set. Streams,
+envelope oracles, and one transcript pair live in
+`tests/fixtures/recpass-2.1.212/` — deliberately OUTSIDE both typed
+manifests (wiring is routed campaign work, per the PRD-0002 precedent).
+Trigger: doctor flagging 2.1.212 vs tested 2.1.208–2.1.211, plus a live
+dogfood misclassification (finding 9).
+
+## Stream status (new)
+
+| scenario | stream | oracle |
+|---|---|---|
+| headless, default model | `headless-default.jsonl` (10 events) | envelope $0.476391 + transcript pair |
+| headless, `--model haiku` | `headless-haiku.jsonl` | envelope (control cell) |
+| background | `background.jsonl` (10 events) | envelope |
+| vitest pass+fail | `vitest.jsonl` | envelope |
+
+## FINDING 9: a third SessionStart mode exists — `source: "clear"` — and it breaks the kind signal's coverage
+
+Observed live in the dogfood ledger (session `7cdc9d81`, this repo): an
+**interactive** session started via `/clear` carries
+`source: "clear"` and **no `model` key** on SessionStart — so the
+finding-3 rule (`model` absent → headless) classifies it `headless`.
+FABRICATED KIND, the degradation law violated by the classifier. This is
+not (necessarily) 2.1.212 drift: `/clear` was never in the finding-3
+2×2 — the interactive cell was recorded at fresh keyboard startup only.
+Both .212 headless cells below are unchanged from .209, so the signal
+itself did not move where it was tested:
+
+| session (2.1.212) | `model` on SessionStart | `source` |
+|---|---|---|
+| headless, default model | absent | `startup` |
+| headless, `--model haiku` | absent | `startup` |
+| interactive via `/clear` (live spool) | **absent** | **`clear`** |
+| interactive, fresh startup | **UNRECORDED — operator keyboard cell, outstanding** | — |
+
+**Consequence:** until the keyboard cell closes and a ruling lands, the
+kind facet mislabels every `/clear`-descended interactive session as
+headless — which also pollutes the PRD-0003 KPI denominator (this
+session's four bound checks rendered it a "delegated" session in the
+live ledger). Candidate honest fix, pending the cell + ruling:
+demote-only corroboration on `source != "startup"` (never classifies,
+only refuses — the Amendment-2 pattern). The range stamp is NOT bumped
+by this pass: everything below verified clean on .212, but kind's
+discriminating cell is exactly the one still unrecorded.
+
+## FINDING 10: the backgrounded-outcome flow changed on 2.1.212 — TaskOutput no longer guaranteed
+
+The backgrounding `PostToolUse` still carries
+`tool_response.backgroundTaskId` (observed `b6a00xufd`), and
+`tool_input.run_in_background: true` is now visible on Pre/PostToolUse.
+But in the observed .212 flow **no `PostToolUse(TaskOutput)` ever
+fires**: the turn Stops, the harness re-invokes the session with a
+synthetic `UserPromptSubmit` whose prompt embeds
+`<task-notification><task-id>…` XML (the id matches
+`backgroundTaskId`), and the model **Read**s the task's output file.
+The R14 join therefore finds no TaskOutput → outcome ABSENT, honestly —
+the designed degradation, now the common case on .212 flows.
+The notification prompt is a *potential* future join source but it is
+string-embedded XML in a prompt (doubly fragile, vitest-error class);
+recorded as a register note, not adopted. TaskOutput may still fire when
+a session polls explicitly — the join stays, ABSENT when unfed.
+
+## FINDING 11: everything else in the fragile register holds on 2.1.212
+
+- **Transcript/cost**: usage on `assistant` lines, `requestId` dedup
+  reproduces the envelope **exactly** (8 in / 625 out / 103,721
+  cache-read / 17,067 cache-creation across 4 requests; 9 assistant
+  lines — dedup still mandatory, ~2.25× over-count without it).
+  Transcript self-identifies `version: "2.1.212"`.
+- **Vitest, both payload paths**: passing run in
+  `tool_response.stdout`, plain text, no ANSI, stable summary lines;
+  failing run in `PostToolUseFailure.error` after `"Exit code 1\n\n"`
+  with failed test names and summary present, no ANSI, and no
+  `tool_response` on the failure event.
+- **Command outcome**: `error` embeds `Exit code N`; `duration_ms`
+  present on PostToolUse/PostToolUseFailure; `prompt_id` on everything
+  after prompt submit.
+- **`claude --version`**: `2.1.212 (Claude Code)` — first-token parse
+  holds.
+- **Additive only** (captured verbatim, no consumer): Bash
+  `tool_response` gains `isImage` and `noOutputExpected` keys.
+- **Not re-verified this pass**: `agent_id`/`agent_type` (no subagent
+  scenario recorded) and the crash variants (SIGTERM/SIGKILL) — .209/.211
+  fixtures remain their evidence.
+
+## Protocol note (self-inflicted, worth keeping)
+
+vitest config discovery walks UP out of the scratch repo: a stray
+`vitest.config.mjs` five directories above the scratch root failed both
+runs on first recording with an UNRESOLVED_IMPORT rolldown error (and
+THAT error path carried ANSI — unlike real vitest output). Scratch
+recorder repos must pin a `vitest.config.mts` at their root. Re-recorded
+clean.

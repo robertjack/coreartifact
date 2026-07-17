@@ -88,13 +88,21 @@ findings section and the decisions log.
   1.61.1 chromium screenshot clean) — an approximation of the real aeh
   worker; a cheap `aeh do` smoke remains the definitive confirmation.
   R9 provisionally dispatch-lane, fallback armed.
-- Next, the one blocking act before `aeh plan`: (b) the recording pass
-  on cc 2.1.212 + range-stamp bump — now with a live lead: THIS
-  interactive session ingested as kind=headless (SessionStart on
-  2.1.212 appears to drop `model`, the fragile-register signal firing;
-  confirm via protocol, record dated in the spec findings). S2
-  follow-ups 132–145 are daily-lane candidates. Geography lives in
-  docs/map.md.
+- (b) recording pass on 2.1.212: SCRIPTABLE HALF DONE (2026-07-17,
+  findings 9–11 in docs/recording-pass.md; streams + oracles at
+  tests/fixtures/recpass-2.1.212/, outside the manifests). Register
+  holds on .212 — cost dedup exact, vitest both paths, error string,
+  duration, version — EXCEPT: (F9) `/clear`-sourced interactive
+  sessions carry no `model` (`source: "clear"`, a mode the finding-3
+  2×2 never covered) → kind FABRICATES headless, polluting the KPI
+  denominator; (F10) TaskOutput no longer guaranteed on .212
+  (notification-prompt flow) → backgrounded outcome commonly ABSENT,
+  honest. Range NOT bumped yet.
+- Next, blocking `aeh plan`: (1) the 2-minute keyboard cell — fresh
+  interactive session in a recorder repo, one command, /exit — closes
+  F9's matrix; (2) the kind-classifier ruling (candidate: demote-only
+  on `source != "startup"`, Amendment-2 pattern) + range-bump decision.
+  S2 follow-ups 132–145 daily-lane. Geography in docs/map.md.
 
 ## Repo conventions
 
