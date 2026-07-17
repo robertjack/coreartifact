@@ -1,0 +1,208 @@
+{
+  "prdId": "PRD-0003",
+  "issues": [
+    {
+      "id": "ISS-0026",
+      "path": "docs/issues/ISS-0026.md"
+    },
+    {
+      "id": "ISS-0027",
+      "path": "docs/issues/ISS-0027.md"
+    },
+    {
+      "id": "ISS-0028",
+      "path": "docs/issues/ISS-0028.md"
+    },
+    {
+      "id": "ISS-0029",
+      "path": "docs/issues/ISS-0029.md"
+    },
+    {
+      "id": "ISS-0030",
+      "path": "docs/issues/ISS-0030.md"
+    },
+    {
+      "id": "ISS-0031",
+      "path": "docs/issues/ISS-0031.md"
+    },
+    {
+      "id": "ISS-0032",
+      "path": "docs/issues/ISS-0032.md"
+    }
+  ],
+  "criteria": [
+    {
+      "criterion": "From any cwd, with at least one registered repo present, coreartifact open --port 0 --no-browser starts a server, prints the bound URL on stdout, and a GET of that URL returns 200 with Content-Type text/html and the dashboard shell body.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "The server binds a loopback address only; the printed URL host resolves to loopback and the server is not reachable on any non-loopback interface.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "Run without --port, coreartifact open --no-browser attempts the default port 2278 first and prints a URL whose port is 2278 when it is free; when 2278 is already bound the server binds an ephemeral port instead and the printed URL carries that port, and in both cases the printed URL is the authoritative one a GET succeeds against.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "Sending SIGINT to the running open process shuts the server down and the process exits without leaving the port bound; sending SIGTERM does the same.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "cart open --port 0 --no-browser behaves identically to coreartifact open --port 0 --no-browser.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "With --no-browser passed, no browser is launched even when stdout is a TTY; browser auto-open is attempted only when stdout is a TTY and --no-browser is absent.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "A request with a method other than GET or HEAD returns 405 with an Allow header listing GET, HEAD and a JSON error body whose code is method_not_allowed.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "A request whose path attempts traversal above the asset root (for example a path containing /../) never returns content from outside dist/web/ and returns 404 with a JSON error body whose code is not_found.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "A request whose Host header host-part is not localhost, 127.0.0.1, or [::1] returns 403 with a JSON error body whose code is forbidden_host and reflects no attacker-controlled host value.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "Every /api/* response and the shell response carry Cache-Control: no-store.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "A GET of a non-/api path that does not resolve to a real asset file returns the shell with 200 (SPA client-routing fallback), while a GET of a content-hashed asset under /assets/ returns that asset with 200.",
+      "issueId": "ISS-0027"
+    },
+    {
+      "criterion": "Against a seeded registry with headless session A carrying one passing bound check, headless B carrying a failing bound check, headless C with no checks, interactive D, and a hand-authored kind-ABSENT session E, GET /api/overview returns kpi.delegated_total 3, kpi.verified 1, kpi.failing 1, kpi.unverified 1, and kpi.unknown_kind 1.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "For the same seeded registry, GET /api/overview returns tiles.spend_present_usd equal to the sum of the present cost_usd values and tiles.cost_absent_count equal to the count of in-window sessions whose cost is ABSENT, and never reports a session with ABSENT cost as a zero contribution to the sum.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "For the same seeded registry, GET /api/overview returns tiles.sessions_by_kind with the headless, interactive, and unknown counts and tiles.failing_checks equal to the count of bound checks with exit_code not zero.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "GET /api/overview returns sessions.latest capped at the LATEST_SESSIONS_LIMIT of 50 newest in-window sessions and sessions.total equal to the true count of in-window sessions across the union.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "A session seeded with started_at eight days before the request instant is absent from kpi, tiles, sessions, and drift, while a session seeded one day before the request instant is present in them.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "GET /api/overview?repo=<root> scopes every aggregate to that one registered root, and GET /api/overview?repo=<unregistered> returns 404 with error code repo_not_registered naming the root.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "With two registered repos where one repo's ledger is unreadable, GET /api/overview still reports the healthy repo's sessions and lists the unreadable repo in repos with status unreadable and a reason string, and does not crash or omit it.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "GET /api/overview against an empty registry returns repos as an empty array, repos_skipped 0, and all kpi and tiles figures as real zeros, never NaN and never an error.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "Replaying a hand-authored session whose enriched cc_version falls outside the tested range 2.1.208 to 2.1.212 makes GET /api/overview carry a drift entry naming that session_id, its version, and the range; an all-in-range session carries no drift entry; and a session whose cc_version is NULL never produces a drift entry.",
+      "issueId": "ISS-0028"
+    },
+    {
+      "criterion": "For a replayed fixture session, GET /api/session/<id> returns facets carrying session_id, repo_root, worktree_path, status, kind, sha_before, sha_after, model, cc_version, started_at, last_event_at, ended_at, plus cost as an object with value and derived true and tokens as an object with derived true and the four token counts.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "For the same session, GET /api/session/<id> returns checks as one entry per bound check with name, exit_code, passed, and truncated; test_results as the parser-derived facet; footprint as an array of touched paths; and absences as facet-and-reason entries copied from the ledger.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "For the same session, GET /api/session/<id> returns timeline in spool seq order where every entry carries prompt_id, agent_id, agent_type, and tool_use_id passed through with null where the event has none, and command entries carry a three-state outcome that stays absent for a backgrounded command with no resolving TaskOutput.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "For a session whose kind is ABSENT, GET /api/session/<id> returns facets.kind as null and an absences entry for the kind facet with its recorded reason, and never renders the ABSENT facet as a zero or an omitted field.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "A GET /api/session/<id> for an id that matches no session in the union returns 404 with error code unknown_session naming the id, and a bare id that resolves in more than one repo returns 404 unknown_session stating it does not uniquely resolve and naming the candidate roots.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "With the server running, appending a valid line to a registered repo's spool changes the very next GET /api/overview and the very next GET /api/session/<id> with no restart and no poll.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "A GET completes without surfacing a database-is-locked error while a separate process concurrently holds the ledger during ingest, for both the overview and the session endpoint.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "After coreartifact open followed by a full browse of the overview and a session view over HTTP, the repo tree outside .coreartifact/ is byte-identical to before and the registry log has not grown.",
+      "issueId": "ISS-0029"
+    },
+    {
+      "criterion": "The overview view-model derives the headline string 1 of 3 from a kpi with verified 1 and delegated_total 3, and derives 0 of 0 from an empty-registry kpi with delegated_total 0 without producing NaN.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The overview view-model derives the three-way segmented-bar segment widths from kpi.verified, kpi.failing, and kpi.unverified so that the three widths are proportional to those counts and sum to the whole for a non-zero delegated_total, and renders an explicit empty state for a zero delegated_total.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The overview view-model renders the spend tile from tiles.spend_present_usd with the derived marker and, when tiles.cost_absent_count is greater than zero, surfaces the count of cost-unknown sessions rather than presenting the sum as a complete figure.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The overview view-model maps a repos entry with status unreadable to a visible degraded row carrying its reason string, and maps repos_skipped greater than zero to a visible surfaced count.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The overview view-model maps a drift array entry to a visible banner naming the session, its version, and the tested range, and renders no banner when the drift array is empty.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The overview view-model maps a session-list entry whose classification is null (interactive or unknown-kind) to a row that omits the verified/failing/unverified badge rather than defaulting it to any of the three states.",
+      "issueId": "ISS-0030"
+    },
+    {
+      "criterion": "The session view-model maps a facets.cost object with derived true to a rendered figure carrying the derived marker, and maps a facets.kind of null that has a matching absences entry to a disclosure chip carrying the recorded reason rather than a dash.",
+      "issueId": "ISS-0031"
+    },
+    {
+      "criterion": "The session view-model maps a self-describing nullable such as a null worktree_path or a null sha_before to a quiet marker and never to a disclosure chip, keeping loud reasoned-ABSENT distinct from quiet self-describing null.",
+      "issueId": "ISS-0031"
+    },
+    {
+      "criterion": "The session view-model maps a checks entry to a badge showing the name and a passed or failed state derived from exit_code, and maps a test_results empty array to an ABSENT test facet distinct from a present zero-count row.",
+      "issueId": "ISS-0031"
+    },
+    {
+      "criterion": "The session view-model maps each timeline entry to a row preserving spool order and surfacing the entry kind, and renders a command entry whose outcome state is absent with the explicit absent marker rather than as success.",
+      "issueId": "ISS-0031"
+    },
+    {
+      "criterion": "The session view-model maps an empty footprint array to a real empty set rather than an ABSENT marker.",
+      "issueId": "ISS-0031"
+    },
+    {
+      "criterion": "Against a repo seeded with headless A (passing bound check), headless B (failing bound check), headless C (no checks), interactive D, hand-authored kind-ABSENT E, and a hand-authored drift session, a headless chromium session loads the printed URL and the overview shows the headline 1 of 3 with the failing session and the unknown-kind session surfaced and the drift banner visible.",
+      "issueId": "ISS-0032"
+    },
+    {
+      "criterion": "In the same chromium session, navigating to session A's view shows the derived-marked cost, at least one check badge, an ABSENT facet rendered with the explicit absent marker and its recorded reason, and timeline rows.",
+      "issueId": "ISS-0032"
+    },
+    {
+      "criterion": "The browser flow captures a screenshot of the overview as its evidence artifact.",
+      "issueId": "ISS-0032"
+    }
+  ],
+  "driftNotes": [
+    "Repair pass only touched footprints and the harness-amendment routing; no code/store contradictions were newly detected (no fresh read-only pass was run).",
+    "The globalSetup SPA-build amendment (tests/acceptance/harness/globalSetup.ts) is now routed as an operator pre-dispatch MAIN hand-edit rather than an issue footprint, because tests/acceptance/harness/ is shared prior-art harness infrastructure that lies outside every issue's own acceptance directory; it must land on MAIN before ISS-0027/0028/0029/0032 dispatch.",
+    "ISS-0026 creates the two router stub views (web/src/views/Overview.tsx, web/src/views/Session.tsx) under touches; their durable owners are ISS-0030/ISS-0031, which replace them — the scaffold-stub-then-replace seam, modeled as touches-vs-owns to keep ownership single."
+  ]
+}
