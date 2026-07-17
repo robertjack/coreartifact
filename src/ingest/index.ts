@@ -20,6 +20,7 @@ import { classifySessionKind, type DriftEvent } from "./drift.js";
 import { setAbsence, clearAbsence } from "../core/absence.js";
 import { extractCommandOutput, claimTestResults } from "./testResults.js";
 import { enrichFromTranscript } from "./enrichment.js";
+import { extractBackgroundTaskId } from "../facets/outcome.js";
 
 const openSync = openSyncFn as (path: string, flags: string) => number;
 const fstatSync = fstatSyncFn as (fd: number) => { size: number };
@@ -183,6 +184,10 @@ interface ParsedNewLine {
   agentId: string | null;
   agentType: string | null;
   toolUseId: string | null;
+  // ISS-0024 R14: the backgrounded-outcome join key, promoted from either
+  // payload location extractBackgroundTaskId knows about — NULL on every
+  // other event.
+  backgroundTaskId: string | null;
   eventText: string;
   eventObj: Record<string, unknown>;
   git?: EnvelopeGit;
@@ -271,6 +276,7 @@ async function runIngestBody(
         agentId: stringOrNull(eventObj.agent_id),
         agentType: stringOrNull(eventObj.agent_type),
         toolUseId: stringOrNull(eventObj.tool_use_id),
+        backgroundTaskId: extractBackgroundTaskId(hookEventName, eventObj),
         eventText: parsed.eventText,
         eventObj,
         git: parsed.git,
@@ -308,8 +314,8 @@ async function runIngestBody(
     handle.db.exec("BEGIN IMMEDIATE");
     try {
       const insertEventStmt = handle.db.prepare(
-        `INSERT INTO events (line_no, session_id, seq, ts, hook_event_name, prompt_id, agent_id, agent_type, tool_use_id, payload)
-         VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO events (line_no, session_id, seq, ts, hook_event_name, prompt_id, agent_id, agent_type, tool_use_id, background_task_id, payload)
+         VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(line_no) DO NOTHING`,
       );
 
@@ -326,6 +332,7 @@ async function runIngestBody(
           line.agentId,
           line.agentType,
           line.toolUseId,
+          line.backgroundTaskId,
           line.eventText,
         );
         report.eventsInserted++;

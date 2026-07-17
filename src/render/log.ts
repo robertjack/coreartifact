@@ -27,6 +27,14 @@ export interface SessionLineInput {
   // ISS-0019: the cost enrichment facet — NULL (ABSENT) when the transcript
   // was unavailable/drifted or the model is unpinned, never fabricated.
   costUsd: number | null;
+  // ISS-0024 R12: the session's bound checks (exit code 0 = pass), summarized
+  // as counts — a real zero (no checks bound) renders "0 pass, 0 fail", never
+  // the absent marker (checks are a countable fact, not an unknown one).
+  // Standalone checks (session NULL, bound_by NULL) belong to no session and
+  // are never counted here — they stay reachable in the ledger directly, not
+  // dropped, just out of `log`'s v1 one-line-per-session scope.
+  checksPass: number;
+  checksFail: number;
 }
 
 // Short id: a prefix of the full session_id, long enough to disambiguate
@@ -45,6 +53,7 @@ export function renderSessionLine(input: SessionLineInput): string {
     input.startedAt,
     `cmds:${input.commandCount}`,
     `files:${input.footprintCount}`,
+    `checks:${input.checksPass} pass, ${input.checksFail} fail`,
     `cost:${renderCostUsd(input.costUsd)}`,
   ].join("  ");
 }

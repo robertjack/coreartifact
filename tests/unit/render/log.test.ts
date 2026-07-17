@@ -20,6 +20,8 @@ const baseInput: SessionLineInput = {
   commandCount: 3,
   footprintCount: 2,
   costUsd: 0.555957,
+  checksPass: 1,
+  checksFail: 1,
 };
 
 describe("renderSessionLine", () => {
@@ -58,6 +60,18 @@ describe("renderSessionLine", () => {
     const line = renderSessionLine({ ...baseInput, costUsd: null });
     expect(line).toContain(ABSENT_MARKER);
     expect(line).not.toContain("0  ");
+  });
+
+  it("ISS-0024: renders a checks column summarizing pass/fail counts, both visible", () => {
+    const line = renderSessionLine({ ...baseInput, checksPass: 2, checksFail: 1 });
+    expect(line.toLowerCase()).toMatch(/2 pass/);
+    expect(line.toLowerCase()).toMatch(/1 fail/);
+  });
+
+  it("ISS-0024: zero bound checks renders a real zero, never the absent marker (checks are a countable fact)", () => {
+    const line = renderSessionLine({ ...baseInput, checksPass: 0, checksFail: 0, kind: "headless" });
+    expect(line.toLowerCase()).toMatch(/0 pass/);
+    expect(line.toLowerCase()).toMatch(/0 fail/);
   });
 });
 

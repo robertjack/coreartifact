@@ -18,6 +18,13 @@ export interface ShowHeaderInput {
   // ISS-0019: the cost enrichment facet, rendered with a derived marker —
   // see src/render/log.ts's own header comment for the same field.
   costUsd: number | null;
+  // ISS-0024 S1: whether ANY test_results row exists for this session (not
+  // per-entry — a session-level fact). Per-command badges already render a
+  // claimed run's real counts, including a real zero (spec: never the
+  // absent marker for a claimed zero-tests run); this flag exists only to
+  // render the session-level absent case, when no command in the session
+  // was ever claimed by a test-results parser at all.
+  hasTestResults: boolean;
 }
 
 // Free text (a prompt, a verbatim error) can itself carry embedded newlines
@@ -32,13 +39,20 @@ function toSingleLine(text: string): string {
 
 export function renderShowHeader(input: ShowHeaderInput): string {
   const footprintText = input.footprint.length > 0 ? input.footprint.join(", ") : "(none)";
-  return [
+  const lines = [
     `session:     ${input.sessionId}`,
     `sha_before:  ${renderAbsent(input.shaBefore)}`,
     `sha_after:   ${renderAbsent(input.shaAfter)}`,
     `footprint:   ${footprintText}`,
     `cost:        ${renderCostUsd(input.costUsd)}`,
-  ].join("\n");
+  ];
+  // ISS-0024 S1: a session with zero test_results rows gets one explicit
+  // session-level absent line here, distinct from a claimed run's real
+  // (possibly zero) counts, which render inline on their own command line.
+  if (!input.hasTestResults) {
+    lines.push(`tests:       ${ABSENT_MARKER}`);
+  }
+  return lines.join("\n");
 }
 
 // ISS-0018: the minimal test-results badge — enough to satisfy "rendered in
@@ -52,6 +66,25 @@ export interface TestResultsBadge {
   skipped: number;
   failedNames: string[];
   durationMs: number | null;
+}
+
+// ISS-0024 R12: one badge line per bound check (name, pass/fail from exit
+// code 0, truncated flag when set) — checks are bound to the session, not
+// to any one timeline entry, so they render as their own section rather
+// than attached to a command line (unlike test-results below).
+export interface CheckBadge {
+  name: string;
+  passed: boolean;
+  truncated: boolean;
+}
+
+function renderCheckBadge(check: CheckBadge): string {
+  const truncatedText = check.truncated ? "  truncated: true" : "";
+  return `check: ${check.name}  ${check.passed ? "pass" : "fail"}${truncatedText}`;
+}
+
+function renderChecks(checks: CheckBadge[]): string {
+  return checks.map(renderCheckBadge).join("\n");
 }
 
 export type TimelineEntry =
@@ -136,8 +169,11 @@ export function renderTimeline(entries: TimelineEntry[]): string {
   return entries.map(renderEntry).join("\n");
 }
 
-export function renderShow(header: ShowHeaderInput, entries: TimelineEntry[]): string {
-  return `${renderShowHeader(header)}\n\n${renderTimeline(entries)}`;
+export function renderShow(header: ShowHeaderInput, checks: CheckBadge[], entries: TimelineEntry[]): string {
+  const sections = [renderShowHeader(header)];
+  if (checks.length > 0) sections.push(renderChecks(checks));
+  sections.push(renderTimeline(entries));
+  return sections.join("\n\n");
 }
 
 // The one place `show <session>` names an unknown id (spec: "An unknown

@@ -26,15 +26,22 @@
 
 import { getPaths } from "../../core/paths.js";
 import { resolveSession } from "../../resolve-session.js";
-import { deriveCommandFacet, deriveInFlightCommandFacet, isBashToolPayload } from "../../facets/outcome.js";
+import {
+  deriveCommandFacet,
+  deriveInFlightCommandFacet,
+  deriveBackgroundedOutcome,
+  isBashToolPayload,
+  type BackgroundJoinCandidate,
+} from "../../facets/outcome.js";
 import {
   renderShow,
   renderUnknownSession,
   renderAmbiguousMatch,
   type TimelineEntry,
   type TestResultsBadge,
+  type CheckBadge,
 } from "../../render/show.js";
-import type { TestResultRow } from "../../core/ledger.js";
+import type { TestResultRow, CheckRow } from "../../core/ledger.js";
 
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
 import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
@@ -77,6 +84,7 @@ interface EventRow {
   agent_id: string | null;
   agent_type: string | null;
   tool_use_id: string | null;
+  background_task_id: string | null;
   payload: string;
 }
 
@@ -141,6 +149,7 @@ function buildTimelineEntry(
   row: EventRow,
   pairedPostToolUseIds: Set<string>,
   testResultsByLineNo: Map<number, TestResultsBadge>,
+  backgroundJoinCandidates: BackgroundJoinCandidate[],
 ): TimelineEntry | null {
   const payload = parsePayload(row.payload);
 
@@ -170,12 +179,21 @@ function buildTimelineEntry(
     isBashToolPayload(payload)
   ) {
     const facet = deriveCommandFacet({ hookEventName: row.hook_event_name, payload });
+    // ISS-0024 R14: an ABSENT command outcome that carries the backgrounding
+    // event's own promoted background_task_id (row.background_task_id) is a
+    // resolvable candidate — join within the session, in memory, over the
+    // already-loaded events. Never re-derives the promotion itself; ingest
+    // already did that (src/facets/outcome.ts's extractBackgroundTaskId).
+    const outcome =
+      facet.outcome.state === "absent" && row.background_task_id !== null
+        ? deriveBackgroundedOutcome(row.background_task_id, backgroundJoinCandidates)
+        : facet.outcome;
     return {
       kind: "command",
       seq: row.seq,
       ts: row.ts,
       command: facet.command,
-      outcome: facet.outcome,
+      outcome,
       durationMs: facet.durationMs,
       testResults: testResultsByLineNo.get(row.line_no) ?? null,
     };
@@ -252,9 +270,28 @@ export async function showCommand(args: string[]): Promise<number> {
 
     const eventRows = db
       .prepare(
-        "SELECT line_no, seq, ts, hook_event_name, agent_id, agent_type, tool_use_id, payload FROM events WHERE session_id = ? ORDER BY seq",
+        "SELECT line_no, seq, ts, hook_event_name, agent_id, agent_type, tool_use_id, background_task_id, payload FROM events WHERE session_id = ? ORDER BY seq",
       )
       .all(sessionId) as EventRow[];
+
+    // ISS-0024 R12: one badge line per bound check, session-scoped (never a
+    // standalone check — session_id NULL never matches this query).
+    const checkRows = db
+      .prepare("SELECT name, exit_code, truncated FROM checks WHERE session_id = ?")
+      .all(sessionId) as Pick<CheckRow, "name" | "exit_code" | "truncated">[];
+    const checkBadges: CheckBadge[] = checkRows.map((row) => ({
+      name: row.name,
+      passed: row.exit_code === 0,
+      truncated: row.truncated === 1,
+    }));
+
+    // ISS-0024 R14: the join candidate set for deriveBackgroundedOutcome — a
+    // background_task_id != null narrows every row before the join scans it,
+    // so this precomputes the parsed payload once per candidate rather than
+    // re-parsing per command entry.
+    const backgroundJoinCandidates: BackgroundJoinCandidate[] = eventRows
+      .filter((row) => row.background_task_id !== null)
+      .map((row) => ({ backgroundTaskId: row.background_task_id, payload: parsePayload(row.payload) }));
 
     // test_results: the parser-derived test facet (docs/issues/ISS-0018.md),
     // keyed on line_no — the same identity the ledger's upsert uses (a
@@ -282,7 +319,7 @@ export async function showCommand(args: string[]): Promise<number> {
 
     const entries: TimelineEntry[] = [];
     for (const row of eventRows) {
-      const entry = buildTimelineEntry(row, pairedPostToolUseIds, testResultsByLineNo);
+      const entry = buildTimelineEntry(row, pairedPostToolUseIds, testResultsByLineNo, backgroundJoinCandidates);
       if (entry !== null) entries.push(entry);
     }
 
@@ -293,7 +330,9 @@ export async function showCommand(args: string[]): Promise<number> {
         shaAfter: sessionRow.sha_after,
         footprint: footprintRows.map((row) => row.path),
         costUsd: sessionRow.cost_usd,
+        hasTestResults: testResultRows.length > 0,
       },
+      checkBadges,
       entries,
     );
     process.stdout.write(`${output}\n`);

@@ -101,3 +101,60 @@ export function deriveCommandFacet(input: CommandFacetInput): CommandFacet {
 
   return { command, durationMs, outcome: { state: "success" } };
 }
+
+// ISS-0024 R14: the backgrounded-outcome join. Ingest's promotion step (the
+// only writer of the ledger's `events.background_task_id` column) reads
+// this same value from ONE of two payload locations, normalized:
+//   - the backgrounding PostToolUse: tool_response.backgroundTaskId
+//   - a later PostToolUse of the TaskOutput tool: tool_input.task_id
+// Both are register entries (undocumented tool + response shape) — any
+// shape surprise (missing/non-string fields) degrades to null, never
+// throws. Gated to PostToolUse only (spec: "The backgrounding PostToolUse
+// carries... a later PostToolUse of the TaskOutput tool carries...") so a
+// PreToolUse(TaskOutput) poll attempt (which also carries tool_input.task_id
+// but no resolved outcome yet) never pollutes the join key.
+export function extractBackgroundTaskId(hookEventName: string, payload: Record<string, unknown>): string | null {
+  if (hookEventName !== "PostToolUse") return null;
+
+  const toolResponse = asObject(payload.tool_response);
+  const backgroundTaskId = toolResponse ? toolResponse.backgroundTaskId : undefined;
+  if (typeof backgroundTaskId === "string" && backgroundTaskId.length > 0) return backgroundTaskId;
+
+  if (payload.tool_name === "TaskOutput") {
+    const toolInput = asObject(payload.tool_input);
+    const taskId = toolInput ? toolInput.task_id : undefined;
+    if (typeof taskId === "string" && taskId.length > 0) return taskId;
+  }
+
+  return null;
+}
+
+export interface BackgroundJoinCandidate {
+  backgroundTaskId: string | null;
+  payload: Record<string, unknown>;
+}
+
+// The join itself: pure derivation over already-loaded session events, no
+// stored outcome column, no spool mutation (spec "The backgrounded-outcome
+// join (R14)"). Scans for a PostToolUse(TaskOutput) event sharing the
+// backgrounding event's task id whose tool_response.task.exitCode resolved
+// as a number: 0 -> success, nonzero -> failure. An in-flight poll (task
+// present but exitCode null/missing, e.g. status "running") does not count
+// as a match — the scan keeps looking. No resolving match anywhere in the
+// session (no poll before session end, a crash, or a hostile/malformed
+// task shape) -> absent, honestly. Never throws.
+export function deriveBackgroundedOutcome(
+  targetTaskId: string,
+  candidates: BackgroundJoinCandidate[],
+): Outcome {
+  for (const candidate of candidates) {
+    if (candidate.backgroundTaskId !== targetTaskId) continue;
+    if (candidate.payload.tool_name !== "TaskOutput") continue;
+    const toolResponse = asObject(candidate.payload.tool_response);
+    const task = toolResponse ? asObject(toolResponse.task) : null;
+    const exitCode = task ? numberOrNull(task.exitCode) : null;
+    if (exitCode === null) continue;
+    return exitCode === 0 ? { state: "success" } : { state: "failure", error: "" };
+  }
+  return { state: "absent" };
+}

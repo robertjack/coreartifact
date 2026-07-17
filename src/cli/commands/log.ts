@@ -82,6 +82,28 @@ function countFootprint(db: SqliteDatabase, sessionId: string): number {
   return row.n;
 }
 
+interface CheckExitCodeRow {
+  exit_code: number;
+}
+
+// ISS-0024 R12: the checks column — pass/fail derived from exit code 0,
+// summarized per session. `WHERE session_id = ?` naturally excludes
+// standalone checks (session_id NULL) — they belong to no session line in
+// v1 (spec "Render (R12)"), not silently dropped, just out of this column's
+// scope; they stay reachable in the ledger's own `checks` table.
+function countChecks(db: SqliteDatabase, sessionId: string): { pass: number; fail: number } {
+  const rows = db
+    .prepare("SELECT exit_code FROM checks WHERE session_id = ?")
+    .all(sessionId) as CheckExitCodeRow[];
+  let pass = 0;
+  let fail = 0;
+  for (const row of rows) {
+    if (row.exit_code === 0) pass++;
+    else fail++;
+  }
+  return { pass, fail };
+}
+
 export async function logCommand(): Promise<number> {
   // No cwd/git-repo requirement here (S2 fix, 2026-07-14 review finding):
   // `log` reads the GLOBAL registry, not cwd. It must exit 0 from any
@@ -120,6 +142,7 @@ export async function logCommand(): Promise<number> {
       .all() as SessionSummaryRow[];
 
     for (const session of sessions) {
+      const checks = countChecks(db, session.session_id);
       sessionLines.push({
         sessionId: session.session_id,
         repoRoot,
@@ -129,6 +152,8 @@ export async function logCommand(): Promise<number> {
         commandCount: countBashCommands(db, session.session_id),
         footprintCount: countFootprint(db, session.session_id),
         costUsd: session.cost_usd,
+        checksPass: checks.pass,
+        checksFail: checks.fail,
       });
     }
   });
