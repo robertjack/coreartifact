@@ -31,7 +31,18 @@ export default function setup(): void {
   // as the tsc build above. Conditional on the scaffold existing so this
   // is a no-op until ISS-0026 merges (and on machines without the web/
   // toolchain installed the guard keeps pre-dashboard suites green).
+  // stdout MUST stay silent on success: the aeh gate parses vitest's
+  // --reporter=json stdout, and globalSetup runs inside that process —
+  // vite's chunk listing on inherited stdio crashed the ISS-0026 gate
+  // (2026-07-17). Capture; surface the output only on failure.
   if (existsSync(join(REPO_ROOT, "vite.config.ts")) && existsSync(VITE_BIN)) {
-    execFileSync(process.execPath, [VITE_BIN, "build"], { cwd: REPO_ROOT, stdio: "inherit" });
+    try {
+      execFileSync(process.execPath, [VITE_BIN, "build"], { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      const e = err as { stdout?: Buffer; stderr?: Buffer };
+      process.stderr.write(String(e.stdout ?? ""));
+      process.stderr.write(String(e.stderr ?? ""));
+      throw err;
+    }
   }
 }
