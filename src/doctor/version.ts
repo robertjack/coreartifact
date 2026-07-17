@@ -20,7 +20,7 @@ import { scrubbedEnv } from "../core/attribution.js";
 // recording pass; one constant, one place.
 export const TESTED_CLAUDE_CODE_RANGE = {
   min: "2.1.208",
-  max: "2.1.211",
+  max: "2.1.212",
 } as const;
 
 const SEMVER_TOKEN_RE = /^\d+\.\d+\.\d+$/;

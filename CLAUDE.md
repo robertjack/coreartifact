@@ -88,21 +88,21 @@ findings section and the decisions log.
   1.61.1 chromium screenshot clean) — an approximation of the real aeh
   worker; a cheap `aeh do` smoke remains the definitive confirmation.
   R9 provisionally dispatch-lane, fallback armed.
-- (b) recording pass on 2.1.212: SCRIPTABLE HALF DONE (2026-07-17,
-  findings 9–11 in docs/recording-pass.md; streams + oracles at
-  tests/fixtures/recpass-2.1.212/, outside the manifests). Register
-  holds on .212 — cost dedup exact, vitest both paths, error string,
-  duration, version — EXCEPT: (F9) `/clear`-sourced interactive
-  sessions carry no `model` (`source: "clear"`, a mode the finding-3
-  2×2 never covered) → kind FABRICATES headless, polluting the KPI
-  denominator; (F10) TaskOutput no longer guaranteed on .212
-  (notification-prompt flow) → backgrounded outcome commonly ABSENT,
-  honest. Range NOT bumped yet.
-- Next, blocking `aeh plan`: (1) the 2-minute keyboard cell — fresh
-  interactive session in a recorder repo, one command, /exit — closes
-  F9's matrix; (2) the kind-classifier ruling (candidate: demote-only
-  on `source != "startup"`, Amendment-2 pattern) + range-bump decision.
-  S2 follow-ups 132–145 daily-lane. Geography in docs/map.md.
+- (b) recording pass on 2.1.212: DONE (2026-07-17, findings 9–11 +
+  F9 closure in docs/recording-pass.md; streams/oracles at
+  tests/fixtures/recpass-2.1.212/). Register holds; keyboard cell
+  closed the matrix (fresh interactive carries `model`; the hole is
+  exactly non-`startup` sources). RULED: kind demote-only on
+  `source != "startup"` (fix lane: `aeh do`, before plan) · range
+  BUMPED 2.1.208–2.1.212 (spec + constant + both over-pinned tests
+  amended — gotcha #7's second sighting, caught by the dogfood check
+  loop). F10: TaskOutput not guaranteed on .212 → backgrounded outcome
+  commonly ABSENT, honest; notification-prompt join = register note.
+- Next: (1) `aeh do` the kind-classifier fix (spec in
+  docs/issues/, drafted) · (2) optional $1 `aeh do` sandbox smoke to
+  firm R9's lane · (3) `aeh plan docs/prd/PRD-0003-dashboard/prd.md` →
+  plan gate (hold to the nine-issue sketch). S2s 132–145 daily-lane.
+  Geography in docs/map.md.
 
 ## Repo conventions
 

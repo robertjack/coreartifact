@@ -361,3 +361,26 @@ runs on first recording with an UNRESOLVED_IMPORT rolldown error (and
 THAT error path carried ANSI — unlike real vitest output). Scratch
 recorder repos must pin a `vitest.config.mts` at their root. Re-recorded
 clean.
+
+## FINDING 9 — CLOSED (2026-07-17, operator keyboard cell)
+
+The outstanding cell recorded (`recpass-2.1.212/interactive-startup.jsonl`,
+6 events): fresh interactive startup on 2.1.212 carries
+**`model: "claude-fable-5"`** with `source: "startup"`, and the clean
+`/exit` re-emitted `reason: "prompt_input_exit"` (finding 4 holds). The
+finding-3 signal therefore SURVIVES on 2.1.212 everywhere it was
+defined; the hole is exactly the non-`startup` source modes.
+
+**Rulings (operator, 2026-07-17):**
+
+1. **Kind classifier — demote-only on non-startup sources.** `model`
+   present → interactive (positive evidence, any source); `model`
+   absent AND `source == "startup"` → headless (the verified cell);
+   `model` absent AND any other source → kind **ABSENT** with a reason
+   naming the unverified source mode. Never classify from n=1 —
+   `"clear"` joins a fixture-verified interactive-source set only if a
+   future pass proves it. Fix lane: daily-lane `aeh do`, before
+   `aeh plan` PRD-0003.
+2. **Tested range bumped 2.1.208–2.1.212** (spec stance + the
+   `TESTED_CLAUDE_CODE_RANGE` constant + its deliberate-tripwire test
+   pin, amended together — the gotcha #7 remedy, exercised as designed).

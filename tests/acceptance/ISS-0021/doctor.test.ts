@@ -48,6 +48,12 @@ import { getPaths } from "../../../src/core/paths.js";
 import { openLedger } from "../../../src/core/ledger.js";
 import { getSessionAbsences, COST_ABSENCE_REASONS } from "../../../src/core/absence.js";
 import { ABSENT_MARKER } from "../../../src/render/absent.js";
+// Operator amendment 2026-07-17 (gotcha #7, second sighting — the PRD-0003
+// recording pass's range bump tripped the hard-pinned "2.1.211" literals):
+// the criterion names "a single named code constant, rendered by doctor",
+// so the constant IS the oracle — assert containment of ITS bounds, never
+// a snapshot of today's values.
+import { TESTED_CLAUDE_CODE_RANGE } from "../../../src/doctor/version.js";
 
 const tmpRepos: TmpRepo[] = [];
 const scratchDirs: string[] = [];
@@ -169,8 +175,12 @@ describe("ISS-0021 doctor: the drift reporter", () => {
 
       const expectedVersionToken = loadClaudeVersionOutputShape().split(/\s+/)[0]!;
       expect(output, "doctor did not report the running Claude Code version").toContain(expectedVersionToken);
-      expect(output, "doctor did not report the tested version range's lower bound").toContain("2.1.208");
-      expect(output, "doctor did not report the tested version range's upper bound").toContain("2.1.211");
+      expect(output, "doctor did not report the tested version range's lower bound").toContain(
+        TESTED_CLAUDE_CODE_RANGE.min,
+      );
+      expect(output, "doctor did not report the tested version range's upper bound").toContain(
+        TESTED_CLAUDE_CODE_RANGE.max,
+      );
       expect(
         output,
         "doctor did not report the ABSENT cost facet's reason for the missing-transcript session",
@@ -216,17 +226,19 @@ describe("ISS-0021 doctor: the drift reporter", () => {
   );
 
   it(
-    "The tested version range is a single named code constant reporting 2.1.208 through 2.1.211, rendered by doctor.",
+    "The tested version range is a single named code constant reporting its lower and upper bounds, rendered by doctor.",
     async () => {
       const repo = await initRepo();
       const gitOnlyDir = makeGitOnlyDir();
       const doctorResult = await withPath(gitOnlyDir, () => runDoctor(repo));
       const output = `${doctorResult.stdout}\n${doctorResult.stderr}`;
 
-      const rangeLine = output.split("\n").find((line) => line.includes("2.1.208") && line.includes("2.1.211"));
+      const rangeLine = output
+        .split("\n")
+        .find((line) => line.includes(TESTED_CLAUDE_CODE_RANGE.min) && line.includes(TESTED_CLAUDE_CODE_RANGE.max));
       expect(
         rangeLine,
-        `doctor did not render a single line naming both the tested range's lower bound (2.1.208) and upper bound (2.1.211). Full output:\n${output}`,
+        `doctor did not render a single line naming both the tested range's lower bound (${TESTED_CLAUDE_CODE_RANGE.min}) and upper bound (${TESTED_CLAUDE_CODE_RANGE.max}). Full output:\n${output}`,
       ).toBeDefined();
     },
     60000,
