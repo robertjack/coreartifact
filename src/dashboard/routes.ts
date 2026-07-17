@@ -6,6 +6,7 @@
 // testable before either endpoint lands.
 
 import { overviewHandler } from "./overview.js";
+import { sessionHandler } from "./session.js";
 
 export interface DashboardRequest {
   method?: string;
@@ -23,11 +24,6 @@ export type ApiHandler = (
   params: Record<string, string>,
 ) => ApiResult | Promise<ApiResult>;
 
-// ISS-0029 replaces this stub with the real GET /api/session/<id> handler.
-function sessionStub(): ApiResult {
-  return { status: 200, body: {} };
-}
-
 interface ApiRoute {
   pattern: RegExp;
   paramNames: string[];
@@ -36,7 +32,7 @@ interface ApiRoute {
 
 const API_ROUTES: ApiRoute[] = [
   { pattern: /^\/api\/overview\/?$/, paramNames: [], handler: overviewHandler },
-  { pattern: /^\/api\/session\/([^/]+)\/?$/, paramNames: ["id"], handler: sessionStub },
+  { pattern: /^\/api\/session\/([^/]+)\/?$/, paramNames: ["id"], handler: sessionHandler },
 ];
 
 export function isApiPath(pathname: string): boolean {
