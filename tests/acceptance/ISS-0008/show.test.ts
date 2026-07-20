@@ -28,10 +28,13 @@
 // selects the real line.
 import { describe, it, expect, afterAll } from "vitest";
 import { spawn, execFileSync } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createTmpRepo,
   runCli,
   replayFixtures,
+  replayLines,
   readLedger,
   gitEnv,
   type TmpRepo,
@@ -39,6 +42,9 @@ import {
 import { loadFixtureStream } from "../../fixtures/loader.js";
 import { getPaths } from "../../../src/core/paths.js";
 import { ABSENT_MARKER } from "../../../src/render/absent.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(__dirname, "../../..");
 
 interface RawHookResult {
   exitCode: number;
@@ -61,34 +67,20 @@ function runRawHookInvocation(command: string[], stdinText: string): Promise<Raw
   });
 }
 
-// Rebases the boundary events' (SessionStart/SessionEnd) `cwd` field onto a
-// LIVE repo root before replay. `cwd` is environmental — the session's
-// working directory — exactly like the isolated HOME/registry the harness
-// already substitutes: a recorded fixture's `cwd` is the recording
-// machine's path (dead on any other machine), so the hook's
-// `git rev-parse` against it always degrades to ABSENT on plain replay
-// (docs/issues/ISS-0008.md, "sha-absent vs sha-present"). Pointing it at
-// the harness's own tmpdir repo (a real git repo with a real HEAD) is
-// environment adaptation, not editing the fixture's semantic content —
-// every other field (event name, session_id, tool fields) is untouched.
-function rebaseBoundaryCwdOntoRepo(lines: string[], repoRoot: string): string[] {
-  return lines.map((line) => {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
-    if (parsed.hook_event_name === "SessionStart" || parsed.hook_event_name === "SessionEnd") {
-      parsed.cwd = repoRoot;
-    }
-    return JSON.stringify(parsed);
-  });
-}
 
-// Sequentially replays caller-supplied (possibly rebased) fixture lines
-// through the installed hook command, one invocation per line, in order —
-// mirrors replayFixtures's own contract but for lines already loaded and
-// transformed in-test rather than loaded fresh by scenario name.
-async function replayLinesThroughHook(lines: string[], command: string[]): Promise<void> {
+// Replays fixture lines verbatim (byte-unchanged, cwd UNPINNED) through the
+// installed hook artifact -- deliberately bypasses the harness's own
+// replayLines/replayFixtures (which unconditionally pin cwd, ISS-0033).
+// Needed only where a test's own point IS the degradation that follows from
+// an unresolvable cwd (R8's sha-absent case below): the recorded fixture's
+// cwd is a dead path on the recording machine, guaranteed absent here too,
+// so this is never the "coincidentally exists on this machine" hazard the
+// harness's pin exists to rule out -- it is the deliberate, safe use of
+// that same guarantee to exercise capture's own git-resolution-failure path.
+async function replayRawUnpinned(lines: string[], command: string[]): Promise<void> {
   for (const line of lines) {
     const result = await runRawHookInvocation(command, line);
-    expect(result.exitCode, "a hook invocation of a rebased fixture line did not exit 0").toBe(0);
+    expect(result.exitCode, "a raw unpinned hook invocation did not exit 0").toBe(0);
   }
 }
 
@@ -162,16 +154,15 @@ describe("ISS-0008 show: the flat timeline, and the three-state outcome", () => 
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const headlessLines = loadFixtureStream("headless");
       const sessionId = sessionIdOf(headlessLines[0]!);
 
-      // sha-PRESENT render: rebase the boundary events' cwd onto this
-      // repo's own live HEAD (see rebaseBoundaryCwdOntoRepo) — the only way
-      // to reach the sha-present path through the real
-      // hook->spool->ingest->show chain (docs/issues/ISS-0008.md).
+      // sha-PRESENT render: the harness's own replayLines pins every line's
+      // cwd to this repo's own live root (ISS-0033) — the only way to reach
+      // the sha-present path through the real hook->spool->ingest->show
+      // chain (docs/issues/ISS-0008.md).
       const expectedSha = currentHeadSha(repo);
-      await replayLinesThroughHook(rebaseBoundaryCwdOntoRepo(headlessLines, repo.root), command);
+      await replayLines(headlessLines, repo.root);
 
       await ingestViaLog(repo);
 
@@ -262,9 +253,14 @@ describe("ISS-0008 show: the flat timeline, and the three-state outcome", () => 
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command);
+      // Deliberately unpinned (see replayRawUnpinned): this test's own R8
+      // criterion needs sha_before/sha_after to degrade to ABSENT because
+      // the recorded cwd genuinely does not resolve as a git repo on this
+      // machine -- the harness's own replayFixtures would pin cwd to this
+      // repo's real HEAD and make that degradation unreachable.
+      const rawCommand = ["node", join(REPO_ROOT, "dist", "hook", "capture.js"), repo.root];
+      await replayRawUnpinned(headlessLines, rawCommand);
       const sessionId = sessionIdOf(headlessLines[0]!);
 
       await ingestViaLog(repo);
@@ -360,24 +356,27 @@ describe("ISS-0008 show: the flat timeline, and the three-state outcome", () => 
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
+      // A raw hand-authored invocation below (missing-SessionStart) never
+      // goes through the harness's pin-aware replay primitives, so it still
+      // needs a literal command against the built hook artifact directly.
+      const command = ["node", join(REPO_ROOT, "dist", "hook", "capture.js"), repo.root];
 
       // --- sha-absent (show): the SIGKILL stream has no SessionEnd line, so
       // sha_after must stay NULL in the ledger and render as ABSENT here. ---
       const sigkillLines = loadFixtureStream("SIGKILL");
-      await replayFixtures("SIGKILL", command);
+      await replayFixtures("SIGKILL", repo.root);
       const sigkillSessionId = sessionIdOf(sigkillLines[0]!);
 
       // --- outcome-absent (show): the headless fixture's own
       // auto-backgrounded "sleep 90" command, in the SAME repo/ledger. ---
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
 
       // --- kind (log): interactive fixture renders "interactive", headless
       // fixture renders "headless" — neither is an absent case. ---
       const interactiveLines = loadFixtureStream("interactive");
-      await replayFixtures("interactive", command);
+      await replayFixtures("interactive", repo.root);
       const interactiveSessionId = sessionIdOf(interactiveLines[0]!);
 
       // --- kind-absent drift fallback (log): a session with no captured
@@ -386,7 +385,7 @@ describe("ISS-0008 show: the flat timeline, and the three-state outcome", () => 
       const missingStartSessionId = "iss8-r12-missing-start-session";
       const skippedStartLines = loadFixtureStream("SIGKILL").slice(1);
       for (const line of skippedStartLines) {
-        const payload = { ...JSON.parse(line), session_id: missingStartSessionId };
+        const payload = { ...JSON.parse(line), session_id: missingStartSessionId, cwd: repo.root };
         const invocation = await runRawHookInvocation(command, JSON.stringify(payload));
         expect(invocation.exitCode, "a hook invocation for the missing-SessionStart session did not exit 0").toBe(0);
       }

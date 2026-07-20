@@ -132,9 +132,9 @@ describe("ISS-0004 hook artifact: capture and boundary enrichment", () => {
       for (const scenario of scenarios) {
         const lines = loadFixtureStream(scenario);
         expectedSequentialLines += lines.length;
-        const result = await replayFixtures(scenario, command);
-        expect(result.invocations.length, `${scenario} stream produced no invocations`).toBe(lines.length);
-        for (const invocation of result.invocations) {
+        const result = await replayFixtures(scenario, repo.root, { command });
+        expect(result.length, `${scenario} stream produced no invocations`).toBe(lines.length);
+        for (const invocation of result) {
           expect(invocation.exitCode, `a "${scenario}" invocation did not exit 0`).toBe(0);
         }
       }
@@ -152,15 +152,23 @@ describe("ISS-0004 hook artifact: capture and boundary enrichment", () => {
       // Byte preservation: replay order is deterministic (sequential, one
       // invocation per line, scenarios processed in the order iterated
       // above), so the Nth spool line's event text must equal the Nth
-      // fixture line's own source text exactly.
+      // fixture line's own source text exactly -- EXCEPT cwd/transcript_path,
+      // which the harness's own replayFixtures now pins by construction
+      // (ISS-0033 contract migration, not a regression; the pin itself is
+      // proven separately by tests/acceptance/ISS-0033's own suite). Every
+      // other field must still byte-match the recorded fixture line exactly.
       const allFixtureLines = scenarios.flatMap((scenario) => loadFixtureStream(scenario));
       for (let i = 0; i < allFixtureLines.length; i += 1) {
         const parsed = parsedLines[i];
         const expectedLine = allFixtureLines[i];
         if (!parsed || !parsed.ok || expectedLine === undefined) continue; // already asserted ok above
-        expect(parsed.eventText, `spool line ${i} did not byte-preserve its source fixture line`).toBe(
-          expectedLine.trim(),
-        );
+        const delivered = JSON.parse(parsed.eventText) as Record<string, unknown>;
+        const original = JSON.parse(expectedLine.trim()) as Record<string, unknown>;
+        const normalizedOriginal = { ...original, cwd: delivered.cwd, transcript_path: delivered.transcript_path };
+        expect(
+          parsed.eventText,
+          `spool line ${i} did not byte-preserve its source fixture line outside the pinned cwd/transcript_path fields`,
+        ).toBe(JSON.stringify(normalizedOriginal));
       }
 
       // Boundary enrichment, positive case: recorded fixtures' own `cwd`
@@ -218,14 +226,18 @@ describe("ISS-0004 hook artifact: capture and boundary enrichment", () => {
       );
 
       const parallelResults = await replayFixturesParallel(
-        parallelScenarios.map((scenario) => ({ scenario, command: parallelCommand })),
+        parallelScenarios.map((scenario) => ({
+          scenario,
+          pinTarget: parallelRepo.root,
+          options: { command: parallelCommand },
+        })),
       );
-      const totalParallelInvocations = parallelResults.reduce((sum, r) => sum + r.invocations.length, 0);
+      const totalParallelInvocations = parallelResults.reduce((sum, r) => sum + r.length, 0);
       expect(totalParallelInvocations, "parallel replay invocation count does not equal the sum of the inputs").toBe(
         expectedParallelLines,
       );
       for (const result of parallelResults) {
-        for (const invocation of result.invocations) {
+        for (const invocation of result) {
           expect(invocation.exitCode, "a parallel invocation did not exit 0").toBe(0);
         }
       }

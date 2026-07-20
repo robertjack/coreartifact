@@ -81,8 +81,7 @@ describe("ISS-0022 uninstall: the way out, byte-identical", () => {
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
 
       // Trigger ingest so the ledger (part of .coreartifact/, part of what
       // uninstall must revert) is actually populated, not just the spool.

@@ -75,9 +75,8 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
       const sessionId = sessionIdOf(headlessLines[0]!);
 
       const logResult = await runCli(["log"], { cwd: repo.root, home: repo.home, registryPath: repo.registryPath });
@@ -127,9 +126,8 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(initA.exitCode, `test setup invariant: repo A's init did not exit 0; stderr: ${initA.stderr}`).toBe(0);
 
       const pathsA = getPaths(repoA.root);
-      const commandA = ["node", pathsA.hookArtifact, repoA.root];
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", commandA);
+      await replayFixtures("headless", repoA.root);
       const sessionId = sessionIdOf(headlessLines[0]!);
 
       // repo B — registered under the SAME shared registry, no session of
@@ -199,9 +197,8 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(init1.exitCode, `test setup invariant: repo1's init did not exit 0; stderr: ${init1.stderr}`).toBe(0);
 
       const paths1 = getPaths(repo1.root);
-      const command1 = ["node", paths1.hookArtifact, repo1.root];
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command1);
+      await replayFixtures("headless", repo1.root);
       const sessionId = sessionIdOf(headlessLines[0]!);
 
       // repo2, registered under the SAME shared registry, replays the
@@ -218,8 +215,7 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       });
       expect(init2.exitCode, `test setup invariant: repo2's init did not exit 0; stderr: ${init2.stderr}`).toBe(0);
       const paths2 = getPaths(repo2.root);
-      const command2 = ["node", paths2.hookArtifact, repo2.root];
-      await replayFixtures("headless", command2);
+      await replayFixtures("headless", repo2.root);
 
       const showResult = await runCli(["show", sessionId], {
         cwd: repo1.root,
@@ -256,9 +252,8 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
       const sessionId = sessionIdOf(headlessLines[0]!);
 
       // --- A full session id continues to work exactly as before. ---
@@ -371,7 +366,6 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const sigkillLines = loadFixtureStream("SIGKILL");
 
       // Truncate right after the LAST Bash PreToolUse, so its Post never
@@ -396,7 +390,7 @@ describe("ISS-0012 show: global and prefix-tolerant, symmetrical with log", () =
       expect(inFlightCommand, "test setup invariant: the truncation PreToolUse carries no command string").not.toBeNull();
 
       const prefix = sigkillLines.slice(0, lastBashPreIndex + 1);
-      await replayLines(prefix, command);
+      await replayLines(prefix, repo.root);
 
       const sessionId = sessionIdOf(sigkillLines[0]!);
       const nowhere = mkdtempSync(join(tmpdir(), "iss0012-inflight-nowhere-"));

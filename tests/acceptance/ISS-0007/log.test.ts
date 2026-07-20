@@ -125,7 +125,7 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
       const command1 = ["node", paths1.hookArtifact, repo1.root];
 
       const headlessLines = loadFixtureStream("headless");
-      await replayFixtures("headless", command1);
+      await replayFixtures("headless", repo1.root);
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
       const expectedCommandCount = distinctBashCommandCount(headlessLines);
       const expectedFootprintCount = distinctFootprintCount(headlessLines);
@@ -189,9 +189,8 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
       );
 
       const paths2 = getPaths(repo2.root);
-      const command2 = ["node", paths2.hookArtifact, repo2.root];
       const interactiveLines = loadFixtureStream("interactive");
-      await replayFixtures("interactive", command2);
+      await replayFixtures("interactive", repo2.root);
       const interactiveSessionId = sessionIdOf(interactiveLines[0]!);
 
       const unionLogResult = await runCli(["log"], {
@@ -319,8 +318,7 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
       expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
       const headlessLines = loadFixtureStream("headless");
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
 
@@ -366,8 +364,7 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
         `test setup invariant: healthy repo's init did not exit 0; stderr: ${initHealthy.stderr}`,
       ).toBe(0);
       const healthyPaths = getPaths(healthyRepo.root);
-      const healthyCommand = ["node", healthyPaths.hookArtifact, healthyRepo.root];
-      await replayFixtures("headless", healthyCommand);
+      await replayFixtures("headless", healthyRepo.root);
       const healthyLines = loadFixtureStream("headless");
       const healthySessionId = sessionIdOf(healthyLines[0]!);
 

@@ -10,7 +10,8 @@
 //
 // Seeding is real-path only (the issue packet's "Test-harness contract"):
 // every session is either replayed through the installed hook (the shared
-// acceptance harness's replayFixtures/replayLines) or, where the packet
+// acceptance harness's replayFixtures/replayLines, which pin cwd/
+// transcript_path by construction — ISS-0033) or, where the packet
 // explicitly sanctions it (an old session outside the window, many
 // sessions for the cap test, and the drift fixture whose transcript has no
 // registered replay scenario), appended directly to the repo's own spool
@@ -153,10 +154,9 @@ function httpGetJson(baseUrl: string, path: string): Promise<HttpJsonResult> {
 }
 
 // Overrides session_id on every raw hook-payload line of an already-loaded
-// fixture stream (mirrors tests/acceptance/ISS-0017/check.test.ts's own
-// makeSecondOpenSession pattern) -- needed whenever a single scenario's
-// fixture stream (baked-in session_id) must appear more than once, or
-// alongside another scenario, in the same repo.
+// fixture stream -- needed whenever a single scenario's fixture stream
+// (baked-in session_id) must appear more than once, or alongside another
+// scenario, in the same repo.
 function overrideSessionId(lines: string[], sessionId: string): string[] {
   return lines.map((line) => JSON.stringify({ ...JSON.parse(line), session_id: sessionId }));
 }
@@ -170,10 +170,10 @@ function truncatedOpen(fullLines: string[], sessionId: string): string[] {
 
 // Replays just the final (SessionEnd) line of a fixture stream under the
 // given session_id -- closes a session previously opened via truncatedOpen.
-async function closeSession(hookCommand: string[], fullLines: string[], sessionId: string): Promise<void> {
+async function closeSession(pinTarget: string, fullLines: string[], sessionId: string): Promise<void> {
   const last = fullLines[fullLines.length - 1]!;
   const overridden = JSON.stringify({ ...JSON.parse(last), session_id: sessionId });
-  await replayLines([overridden], hookCommand);
+  await replayLines([overridden], pinTarget);
 }
 
 function loadRawFixtureLines(relPath: string): string[] {
@@ -186,19 +186,22 @@ function loadRawFixtureLines(relPath: string): string[] {
 // for the 8-day-old exclusion case, reused here (with an explicit ts) for
 // the cap test and the drift fixture, both of which need timestamps or
 // transcript paths the real hook cannot be told to fabricate (the hook
-// always stamps its own real-now ts at replay).
+// always stamps its own real-now ts at replay). This bypasses the harness's
+// replay pin entirely by design -- it never replays a recorded fixture, so
+// `cwd` here is always this test's own live tmp-repo root, never a
+// leftover recording-machine path.
 function appendHandAuthoredSession(
   spoolPath: string,
   ts: string,
   sessionId: string,
-  repoRoot: string,
+  pinTarget: string,
   transcriptPath: string | null,
 ): void {
   const event: Record<string, unknown> = {
     session_id: sessionId,
     hook_event_name: "SessionStart",
     source: "startup",
-    cwd: repoRoot,
+    cwd: pinTarget,
   };
   if (transcriptPath !== null) event.transcript_path = transcriptPath;
   const line = `${JSON.stringify({ v: 1, ts, event })}\n`;
@@ -271,41 +274,39 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
     async () => {
       const repo = await makeRepo();
       await initRepo(repo);
-      const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       const headlessLines = loadFixtureStream("headless");
       const interactiveLines = loadFixtureStream("interactive");
       const clearSourceLines = loadRawFixtureLines("tests/fixtures/clear-source.jsonl");
 
       // A: passing bound check.
-      await replayLines(truncatedOpen(headlessLines, "iss28-r1-session-a"), hookCommand);
+      await replayLines(truncatedOpen(headlessLines, "iss28-r1-session-a"), repo.root);
       const checkA = await runCli(["check", "r1-check-a", "--", "node", "-e", "process.exit(0)"], {
         cwd: repo.root,
         home: repo.home,
         registryPath: repo.registryPath,
       });
       expect(checkA.exitCode, "the passing check for session A must exit 0").toBe(0);
-      await closeSession(hookCommand, headlessLines, "iss28-r1-session-a");
+      await closeSession(repo.root, headlessLines, "iss28-r1-session-a");
 
       // B: failing bound check.
-      await replayLines(truncatedOpen(headlessLines, "iss28-r1-session-b"), hookCommand);
+      await replayLines(truncatedOpen(headlessLines, "iss28-r1-session-b"), repo.root);
       const checkB = await runCli(["check", "r1-check-b", "--", "node", "-e", "process.exit(1)"], {
         cwd: repo.root,
         home: repo.home,
         registryPath: repo.registryPath,
       });
       expect(checkB.exitCode, "the failing check for session B must exit with the wrapped command's code").toBe(1);
-      await closeSession(hookCommand, headlessLines, "iss28-r1-session-b");
+      await closeSession(repo.root, headlessLines, "iss28-r1-session-b");
 
       // C: headless, zero checks.
-      await replayLines(overrideSessionId(headlessLines, "iss28-r1-session-c"), hookCommand);
+      await replayLines(overrideSessionId(headlessLines, "iss28-r1-session-c"), repo.root);
 
       // D: interactive.
-      await replayLines(overrideSessionId(interactiveLines, "iss28-r1-session-d"), hookCommand);
+      await replayLines(overrideSessionId(interactiveLines, "iss28-r1-session-d"), repo.root);
 
       // E: kind-ABSENT (source "clear", no model).
-      await replayLines(overrideSessionId(clearSourceLines, "iss28-r1-session-e"), hookCommand);
+      await replayLines(overrideSessionId(clearSourceLines, "iss28-r1-session-e"), repo.root);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -328,47 +329,26 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
     async () => {
       const repo = await makeRepo();
       await initRepo(repo);
-      const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
-
-      // Operator amendment 2026-07-17 (escalation rescue; test-only).
-      // Recorded streams carry ABSOLUTE cwd/transcript_path values from the
-      // recording machine — and on that machine the recording-pass leftovers
-      // still EXIST at those exact paths, so a verbatim replay fabricates a
-      // present cost from a leftover transcript and can attribute the
-      // session into a stale repo (executed failure: spend_present_usd
-      // 0.0558… instead of the 0.555957 oracle). Pin both fields to
-      // tmpdir-controlled values — the same explicitness
-      // appendHandAuthoredSession already uses. Pinning IS the criterion's
-      // intent: "whose transcript_path does not exist in this tmpdir" must
-      // be made true by construction, never assumed of a recorded absolute
-      // path.
-      function pinLineToRepo(line: string, transcriptPath?: string): string {
-        const obj = JSON.parse(line) as Record<string, unknown>;
-        obj.cwd = repo.root;
-        if (transcriptPath !== undefined && "transcript_path" in obj) obj.transcript_path = transcriptPath;
-        return JSON.stringify(obj);
-      }
 
       // Present-cost session: transcript materialized in place via the
       // fixtures' own sanctioned technique for a replayed stream
       // (tests/fixtures/transcriptReplay.ts's buildSubstitutedTranscript),
       // named by the issue packet as the tool for this exact seeding need.
-      // Its transcript_path is already substituted; only cwd needs pinning.
+      // Its transcript_path is already substituted (workDir == repo.root);
+      // the harness's own replayLines pins cwd to repo.root by construction.
       const { buildSubstitutedTranscript } = await import("../../fixtures/transcriptReplay.js");
-      const { lines: presentLines } = buildSubstitutedTranscript("cost-headless", repo.root);
-      await replayLines(presentLines.map((l) => pinLineToRepo(l)), hookCommand);
+      const presentSubstituted = buildSubstitutedTranscript("cost-headless", repo.root);
+      await replayLines(presentSubstituted.lines, repo.root, {
+        transcriptPathOverride: presentSubstituted.transcriptPath,
+      });
 
       // Absent-cost session: a headless replay whose transcript_path is
       // pinned to a path that does not exist in this tmpdir by construction
       // -- cost reads ABSENT.
       const headlessLines = loadFixtureStream("headless");
-      await replayLines(
-        overrideSessionId(headlessLines, "iss28-r2-absent").map((l) =>
-          pinLineToRepo(l, join(repo.root, "no-such-transcript.jsonl")),
-        ),
-        hookCommand,
-      );
+      await replayLines(overrideSessionId(headlessLines, "iss28-r2-absent"), repo.root, {
+        transcriptPathOverride: join(repo.root, "no-such-transcript.jsonl"),
+      });
 
       const oracle = loadTranscriptPair("cost-headless").oracle;
       if (!oracle) throw new Error("test setup invariant: cost-headless transcript pair has no oracle");
@@ -397,8 +377,6 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
     async () => {
       const repo = await makeRepo();
       await initRepo(repo);
-      const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const headlessLines = loadFixtureStream("headless");
       const interactiveLines = loadFixtureStream("interactive");
       const clearSourceLines = loadRawFixtureLines("tests/fixtures/clear-source.jsonl");
@@ -413,29 +391,29 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
       expect(standalone.exitCode, "the standalone check must still exit with the wrapped command's code").toBe(1);
 
       // H1: headless, bound failing check.
-      await replayLines(truncatedOpen(headlessLines, "iss28-r3-h1"), hookCommand);
+      await replayLines(truncatedOpen(headlessLines, "iss28-r3-h1"), repo.root);
       const checkH1 = await runCli(["check", "r3-h1-fail", "--", "node", "-e", "process.exit(1)"], {
         cwd: repo.root,
         home: repo.home,
         registryPath: repo.registryPath,
       });
       expect(checkH1.exitCode).toBe(1);
-      await closeSession(hookCommand, headlessLines, "iss28-r3-h1");
+      await closeSession(repo.root, headlessLines, "iss28-r3-h1");
 
       // H2: headless, bound passing check.
-      await replayLines(truncatedOpen(headlessLines, "iss28-r3-h2"), hookCommand);
+      await replayLines(truncatedOpen(headlessLines, "iss28-r3-h2"), repo.root);
       const checkH2 = await runCli(["check", "r3-h2-pass", "--", "node", "-e", "process.exit(0)"], {
         cwd: repo.root,
         home: repo.home,
         registryPath: repo.registryPath,
       });
       expect(checkH2.exitCode).toBe(0);
-      await closeSession(hookCommand, headlessLines, "iss28-r3-h2");
+      await closeSession(repo.root, headlessLines, "iss28-r3-h2");
 
       // I1: interactive.
-      await replayLines(overrideSessionId(interactiveLines, "iss28-r3-i1"), hookCommand);
+      await replayLines(overrideSessionId(interactiveLines, "iss28-r3-i1"), repo.root);
       // U1: unknown kind.
-      await replayLines(overrideSessionId(clearSourceLines, "iss28-r3-u1"), hookCommand);
+      await replayLines(overrideSessionId(clearSourceLines, "iss28-r3-u1"), repo.root);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -563,14 +541,9 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
       const repoB = await makeRepo();
       await registerSecondRepo(repoA, repoB);
 
-      const pathsA = getPaths(repoA.root);
-      const pathsB = getPaths(repoB.root);
-      const hookCommandA = ["node", pathsA.hookArtifact, repoA.root];
-      const hookCommandB = ["node", pathsB.hookArtifact, repoB.root];
-
       const headlessLines = loadFixtureStream("headless");
-      await replayLines(overrideSessionId(headlessLines, "iss28-r6-scope-a"), hookCommandA);
-      await replayLines(overrideSessionId(headlessLines, "iss28-r6-scope-b"), hookCommandB);
+      await replayLines(overrideSessionId(headlessLines, "iss28-r6-scope-a"), repoA.root);
+      await replayLines(overrideSessionId(headlessLines, "iss28-r6-scope-b"), repoB.root);
 
       const opened = await openServerFor(repoA.home, repoA.registryPath, repoA.root);
       try {
@@ -605,10 +578,8 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
       const repoB = await makeRepo();
       await registerSecondRepo(repoA, repoB);
 
-      const pathsA = getPaths(repoA.root);
       const pathsB = getPaths(repoB.root);
-      const hookCommandA = ["node", pathsA.hookArtifact, repoA.root];
-      await replayLines(overrideSessionId(loadFixtureStream("headless"), "iss28-r7-healthy"), hookCommandA);
+      await replayLines(overrideSessionId(loadFixtureStream("headless"), "iss28-r7-healthy"), repoA.root);
 
       // Make repoB's ledger path a directory instead of a file: openLedger
       // (src/core/ledger.ts) throws LedgerPathIsDirectoryError on this

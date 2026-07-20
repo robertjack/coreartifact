@@ -7,7 +7,9 @@
 // loadClaudeVersionOutputShape — the recorded `claude --version` output
 // shape this issue's shim reuses rather than hardcoding a guessed string)
 // and ../../fixtures/transcriptReplay.js (buildSubstitutedTranscript — the
-// one sanctioned substitution).
+// one sanctioned substitution). The harness's own replayLines pins
+// cwd/transcript_path by construction (ISS-0033); a substituted transcript's
+// own path survives via transcriptPathOverride.
 //
 // `doctor` itself (src/cli/commands/doctor.ts, not yet registered in
 // src/cli/index.ts's COMMANDS table) is never imported directly: every
@@ -108,12 +110,10 @@ function sessionIdOf(fixtureLine: string): string {
   return parsed.session_id;
 }
 
-function transformLines(lines: string[], fn: (obj: Record<string, unknown>) => void): string[] {
-  return lines.map((line) => {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
-    fn(parsed);
-    return JSON.stringify(parsed);
-  });
+// Overrides session_id on every raw hook-payload line — the one non-pin
+// duty the old transformLines helper also carried, kept local (ISS-0033).
+function overrideSessionId(lines: string[], sessionId: string): string[] {
+  return lines.map((line) => JSON.stringify({ ...JSON.parse(line), session_id: sessionId }));
 }
 
 async function initRepo(): Promise<TmpRepo> {
@@ -134,7 +134,6 @@ describe("ISS-0021 doctor: the drift reporter", () => {
     async () => {
       const repo = await initRepo();
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       // --- A cost-facet absence: a session whose transcript path is
       // guaranteed nonexistent, ingested via `log` (doctor never ingests
@@ -142,12 +141,8 @@ describe("ISS-0021 doctor: the drift reporter", () => {
       const missingScratchDir = makeScratchDir("coreartifact-iss21-r8-missing-");
       const missingTranscriptPath = join(missingScratchDir, "nonexistent.transcript.jsonl");
       const missingSessionId = "iss21-r8-missing-transcript-session";
-      const missingLines = transformLines(loadFixtureStream("cost-headless"), (obj) => {
-        obj.cwd = repo.root;
-        obj.session_id = missingSessionId;
-        obj.transcript_path = missingTranscriptPath;
-      });
-      await replayLines(missingLines, command);
+      const missingLines = overrideSessionId(loadFixtureStream("cost-headless"), missingSessionId);
+      await replayLines(missingLines, repo.root, { transcriptPathOverride: missingTranscriptPath });
       const ingestResult = await runCli(["log"], { cwd: repo.root, home: repo.home, registryPath: repo.registryPath });
       expect(ingestResult.exitCode, `test setup invariant: log/ingest did not exit 0; stderr: ${ingestResult.stderr}`).toBe(0);
 
@@ -249,17 +244,13 @@ describe("ISS-0021 doctor: the drift reporter", () => {
     async () => {
       const repo = await initRepo();
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const pair = loadTranscriptPair("cost-headless");
       const sessionId = sessionIdOf(loadFixtureStream("cost-headless")[0]!);
 
       const workDir = makeScratchDir("coreartifact-iss21-ccversion-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
-      const rebased = transformLines(substituted.lines, (obj) => {
-        obj.cwd = repo.root;
-      });
-      await replayLines(rebased, command);
+      await replayLines(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       const ingestResult = await runCli(["log"], { cwd: repo.root, home: repo.home, registryPath: repo.registryPath });
       expect(ingestResult.exitCode, `test setup invariant: log/ingest did not exit 0; stderr: ${ingestResult.stderr}`).toBe(0);
 
@@ -331,13 +322,11 @@ describe("ISS-0021 doctor: the drift reporter", () => {
       // gaps, and the claude shim present on PATH — must exit 0. ---
       const cleanRepo = await initRepo();
       const cleanPaths = getPaths(cleanRepo.root);
-      const cleanCommand = ["node", cleanPaths.hookArtifact, cleanRepo.root];
       const cleanWorkDir = makeScratchDir("coreartifact-iss21-readonly-clean-");
       const cleanSubstituted = buildSubstitutedTranscript("cost-headless", cleanWorkDir);
-      const cleanRebased = transformLines(cleanSubstituted.lines, (obj) => {
-        obj.cwd = cleanRepo.root;
+      await replayLines(cleanSubstituted.lines, cleanRepo.root, {
+        transcriptPathOverride: cleanSubstituted.transcriptPath,
       });
-      await replayLines(cleanRebased, cleanCommand);
       const cleanIngest = await runCli(["log"], {
         cwd: cleanRepo.root,
         home: cleanRepo.home,

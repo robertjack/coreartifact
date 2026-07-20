@@ -10,6 +10,10 @@
 // (buildSubstitutedTranscript — the one sanctioned substitution: copies the
 // paired transcript fixture into a test-owned tmpdir and rewrites
 // transcript_path in delivered payloads, never touching a committed file).
+// The harness's own replayLines pins cwd/transcript_path by construction
+// (ISS-0033) — a substituted transcript's own path survives via
+// transcriptPathOverride, and a session_id override (needed whenever the
+// same scenario appears more than once) is a local, non-pin duty.
 //
 // src/ingest/enrichment.ts and src/core/priceTable.ts (this issue's [files]
 // owns entries) are never imported directly — every assertion below drives
@@ -19,13 +23,6 @@
 // by ISS-0014) — the public seams the spec names. Both modules are
 // independent, already-shipped exports, so they are plain static imports,
 // not caught dynamic ones.
-//
-// The three new recorded fixtures (cost-headless, vitest, background) were
-// captured under /private/tmp/.../scratchpad/<name>-repo — a session-hash
-// path that is dead on any other machine but is NOT guaranteed dead on the
-// exact box that recorded it. Every replayed line's cwd is rebased onto this
-// test's own live tmpdir repo (mirrors ISS-0018's rebaseCwdOntoRepo) so
-// ingest's repo-root resolution never depends on host machine state.
 import { describe, it, expect, afterAll } from "vitest";
 import {
   mkdtempSync,
@@ -57,22 +54,11 @@ function sessionIdOf(fixtureLine: string): string {
   return parsed.session_id;
 }
 
-// Rewrites each line's parsed JSON via `fn`, mirroring ISS-0018's own
-// rebaseCwdOntoRepo but generalized to whatever fields a given phase needs
-// to override (cwd, transcript_path, session_id) — every other recorded
-// field stays exactly as-is.
-function transformLines(lines: string[], fn: (obj: Record<string, unknown>) => void): string[] {
-  return lines.map((line) => {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
-    fn(parsed);
-    return JSON.stringify(parsed);
-  });
-}
-
-function rebaseCwd(lines: string[], repoRoot: string): string[] {
-  return transformLines(lines, (obj) => {
-    obj.cwd = repoRoot;
-  });
+// Overrides session_id on every raw hook-payload line — the one non-pin
+// duty the old transformLines helper also carried, kept local per the
+// harness's own "it pins, it does not transform" boundary (ISS-0033).
+function overrideSessionId(lines: string[], sessionId: string): string[] {
+  return lines.map((line) => JSON.stringify({ ...JSON.parse(line), session_id: sessionId }));
 }
 
 async function ingestViaLog(repo: TmpRepo): Promise<{ exitCode: number; stdout: string; stderr: string }> {
@@ -179,7 +165,6 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const dataDir = dirname(paths.spool);
 
       const pair = loadTranscriptPair("cost-headless");
@@ -189,11 +174,10 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
 
       const workDir = makeScratchDir("coreartifact-iss19-r5-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
-      const rebased = rebaseCwd(substituted.lines, repo.root);
 
       const transcriptBytesBeforeIngest = readFileSync(substituted.transcriptPath);
 
-      await replayLines(rebased, command);
+      await replayLines(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await ingestViaLog(repo);
 
       // --- ledger columns match the oracle exactly. ---
@@ -263,7 +247,6 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
       const costHeadlessPair = loadTranscriptPair("cost-headless");
 
       // --- Phase 1: missing transcript file. A guaranteed-nonexistent
@@ -277,12 +260,8 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
         false,
       );
 
-      const missingLines = transformLines(loadFixtureStream("cost-headless"), (obj) => {
-        obj.cwd = repo.root;
-        obj.session_id = missingSessionId;
-        obj.transcript_path = missingTranscriptPath;
-      });
-      await replayLines(missingLines, command);
+      const missingLines = overrideSessionId(loadFixtureStream("cost-headless"), missingSessionId);
+      await replayLines(missingLines, repo.root, { transcriptPathOverride: missingTranscriptPath });
       const missingLog = await ingestViaLog(repo);
       expect(missingLog.exitCode, "ingest did not complete normally when the transcript file was missing").toBe(0);
 
@@ -304,11 +283,8 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       const driftedSubstituted = buildSubstitutedTranscript("cost-headless", driftedScratchDir);
       driftTranscriptByRemovingUsage(driftedSubstituted.transcriptPath);
       const driftedSessionId = "iss19-r6-drifted-transcript-session";
-      const driftedLines = transformLines(driftedSubstituted.lines, (obj) => {
-        obj.cwd = repo.root;
-        obj.session_id = driftedSessionId;
-      });
-      await replayLines(driftedLines, command);
+      const driftedLines = overrideSessionId(driftedSubstituted.lines, driftedSessionId);
+      await replayLines(driftedLines, repo.root, { transcriptPathOverride: driftedSubstituted.transcriptPath });
       const driftedLog = await ingestViaLog(repo);
       expect(driftedLog.exitCode, "ingest did not complete normally over a drifted transcript").toBe(0);
 
@@ -360,7 +336,6 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const pair = loadTranscriptPair("cost-headless");
       if (!pair.oracle) throw new Error("test setup invariant: cost-headless must carry an envelope oracle");
@@ -374,8 +349,7 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
 
       const workDir = makeScratchDir("coreartifact-iss19-dedup-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
-      const rebased = rebaseCwd(substituted.lines, repo.root);
-      await replayLines(rebased, command);
+      await replayLines(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await ingestViaLog(repo);
 
       // Independent oracle for "a naive per-line summer would not [reproduce
@@ -418,7 +392,6 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const scenarios = ["cost-headless", "vitest", "background"] as const;
       const expectedBySession: Record<string, number> = {};
@@ -431,8 +404,7 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
 
         const workDir = makeScratchDir(`coreartifact-iss19-price-${scenario}-`);
         const substituted = buildSubstitutedTranscript(scenario, workDir);
-        const rebased = rebaseCwd(substituted.lines, repo.root);
-        await replayLines(rebased, command);
+        await replayLines(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       }
 
       await ingestViaLog(repo);
@@ -462,7 +434,6 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const pair = loadTranscriptPair("cost-headless");
       if (!pair.oracle) throw new Error("test setup invariant: cost-headless must carry an envelope oracle");
@@ -476,11 +447,8 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       const workDir = makeScratchDir("coreartifact-iss19-unpinned-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
       rewriteTranscriptModel(substituted.transcriptPath, unpinnedModel);
-      const lines = transformLines(substituted.lines, (obj) => {
-        obj.cwd = repo.root;
-        obj.session_id = sessionId;
-      });
-      await replayLines(lines, command);
+      const lines = overrideSessionId(substituted.lines, sessionId);
+      await replayLines(lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await ingestViaLog(repo);
 
       const row = findSessionRow(paths.ledger, sessionId);
@@ -515,27 +483,21 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const pair = loadTranscriptPair("cost-headless");
       const readableSessionId = sessionIdOf(loadFixtureStream("cost-headless")[0]!);
 
       const workDir = makeScratchDir("coreartifact-iss19-ccversion-readable-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
-      const rebased = rebaseCwd(substituted.lines, repo.root);
-      await replayLines(rebased, command);
+      await replayLines(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
 
       // Unreadable transcript: a guaranteed-nonexistent path, distinct
       // session — mirrors the R6 missing-transcript setup.
       const missingScratchDir = makeScratchDir("coreartifact-iss19-ccversion-missing-");
       const missingTranscriptPath = join(missingScratchDir, "nonexistent.transcript.jsonl");
       const unreadableSessionId = "iss19-ccversion-unreadable-session";
-      const unreadableLines = transformLines(loadFixtureStream("cost-headless"), (obj) => {
-        obj.cwd = repo.root;
-        obj.session_id = unreadableSessionId;
-        obj.transcript_path = missingTranscriptPath;
-      });
-      await replayLines(unreadableLines, command);
+      const unreadableLines = overrideSessionId(loadFixtureStream("cost-headless"), unreadableSessionId);
+      await replayLines(unreadableLines, repo.root, { transcriptPathOverride: missingTranscriptPath });
 
       await ingestViaLog(repo);
 

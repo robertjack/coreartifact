@@ -280,9 +280,8 @@ describe("ISS-0017 check: evidence badges through the spool", () => {
       const initOne = await runCli(["init"], optsOne);
       expect(initOne.exitCode, `test setup invariant: init did not exit 0; stderr: ${initOne.stderr}`).toBe(0);
       const pathsOne = getPaths(repoOne.root);
-      const hookCommandOne = ["node", pathsOne.hookArtifact, repoOne.root];
       const sigkillLines = loadFixtureStream("SIGKILL");
-      await replayFixtures("SIGKILL", hookCommandOne);
+      await replayFixtures("SIGKILL", repoOne.root);
       const openSessionId = sessionIdOf(sigkillLines[0]!);
 
       const oneCheck = await runCli(["check", "bind-one", "--", "node", "-e", "process.exit(0)"], optsOne);
@@ -302,9 +301,11 @@ describe("ISS-0017 check: evidence badges through the spool", () => {
       const initSeveral = await runCli(["init"], optsSeveral);
       expect(initSeveral.exitCode, `test setup invariant: init did not exit 0; stderr: ${initSeveral.stderr}`).toBe(0);
       const pathsSeveral = getPaths(repoSeveral.root);
-      const hookCommandSeveral = ["node", pathsSeveral.hookArtifact, repoSeveral.root];
-      await replayFixtures("SIGKILL", hookCommandSeveral);
+      await replayFixtures("SIGKILL", repoSeveral.root);
       const secondOpenId = "iss17-r3-second-open-session";
+      // makeSecondOpenSession is a raw hook invocation (never through the
+      // harness's replay primitives), so it still needs a literal command.
+      const hookCommandSeveral = ["node", pathsSeveral.hookArtifact, repoSeveral.root];
       await makeSecondOpenSession(hookCommandSeveral, secondOpenId);
 
       const severalCheck = await runCli(["check", "bind-several", "--", "node", "-e", "process.exit(0)"], optsSeveral);
@@ -425,9 +426,8 @@ describe("ISS-0017 check: evidence badges through the spool", () => {
       const init = await runCli(["init"], opts);
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sigkillLines = loadFixtureStream("SIGKILL");
-      await replayFixtures("SIGKILL", hookCommand);
+      await replayFixtures("SIGKILL", repo.root);
       const openSessionId = sessionIdOf(sigkillLines[0]!);
 
       // Prime a ledger that already knows about the open session, then

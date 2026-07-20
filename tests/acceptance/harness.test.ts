@@ -81,28 +81,32 @@ describe("acceptance harness self-test", () => {
     }
   });
 
-  it("the fixture replayer pipes a real fixture stream into a stub command that records the stdin it received, one invocation per line", async () => {
+  it("the fixture replayer pipes a real fixture stream into a stub command that records the stdin it received, one invocation per line, every delivered line pinned to the given pin target (ISS-0033)", async () => {
     const workDir = mkdtempSync(join(tmpdir(), "coreartifact-harness-selftest-"));
     try {
       const stubPath = join(workDir, "stub.cjs");
       const resultsFile = join(workDir, "results.ndjson");
       writeFileSync(stubPath, STUB_SCRIPT);
       writeFileSync(resultsFile, "");
+      const pinTarget = mkdtempSync(join(tmpdir(), "coreartifact-harness-selftest-pin-"));
 
-      const result = await replayFixtures("headless", ["node", stubPath, resultsFile]);
-      expect(result.invocations.length).toBeGreaterThan(0);
+      const invocations = await replayFixtures("headless", pinTarget, { command: ["node", stubPath, resultsFile] });
+      expect(invocations.length).toBeGreaterThan(0);
 
       const recorded = readFileSync(resultsFile, "utf8")
         .split("\n")
         .filter((line) => line.length > 0)
         .map((line) => JSON.parse(line));
-      expect(recorded.length).toBe(result.invocations.length);
+      expect(recorded.length).toBe(invocations.length);
 
       for (let i = 0; i < recorded.length; i += 1) {
         const stubBytes = Buffer.from(recorded[i].base64, "base64");
-        const reportedBytes = Buffer.from(result.invocations[i].stdinBytes);
+        const reportedBytes = Buffer.from(invocations[i].stdinBytes);
         expect(stubBytes.equals(reportedBytes)).toBe(true);
-        expect(typeof result.invocations[i].exitCode).toBe("number");
+        expect(typeof invocations[i].exitCode).toBe("number");
+
+        const delivered = JSON.parse(reportedBytes.toString("utf8"));
+        expect(delivered.cwd).toBe(pinTarget);
       }
     } finally {
       rmSync(workDir, { recursive: true, force: true });
@@ -116,7 +120,7 @@ describe("acceptance harness self-test", () => {
   // received exactly the sum of every stream's lines, none lost, none
   // duplicated (a sorted multiset comparison catches loss/duplication even
   // though concurrent scheduling means arrival order is not guaranteed).
-  it("the parallel replayer interleaves N streams into one stub command, which receives exactly the sum of the input lines, none lost, none duplicated", async () => {
+  it("the parallel replayer interleaves N streams into one stub command, which receives exactly the sum of the input lines, none lost, none duplicated, every delivered line pinned to its own request's pin target (ISS-0033 contract migration: byte equality now asserted post-pin, not against the raw committed fixture text)", async () => {
     const workDir = mkdtempSync(join(tmpdir(), "coreartifact-harness-selftest-parallel-"));
     try {
       const stubPath = join(workDir, "stub.cjs");
@@ -128,11 +132,12 @@ describe("acceptance harness self-test", () => {
       const expectedLines = scenarios.flatMap((scenario) => loadFixtureStream(scenario));
       expect(expectedLines.length).toBeGreaterThan(0);
 
+      const pinTarget = mkdtempSync(join(tmpdir(), "coreartifact-harness-selftest-parallel-pin-"));
       const results = await replayFixturesParallel(
-        scenarios.map((scenario) => ({ scenario, command: ["node", stubPath, resultsFile] })),
+        scenarios.map((scenario) => ({ scenario, pinTarget, options: { command: ["node", stubPath, resultsFile] } })),
       );
 
-      const totalInvocations = results.reduce((sum, r) => sum + r.invocations.length, 0);
+      const totalInvocations = results.reduce((sum, r) => sum + r.length, 0);
       expect(totalInvocations).toBe(expectedLines.length);
 
       const recorded = readFileSync(resultsFile, "utf8")
@@ -141,11 +146,32 @@ describe("acceptance harness self-test", () => {
         .map((line) => JSON.parse(line) as { base64: string });
       expect(recorded.length).toBe(expectedLines.length);
 
+      // Post-pin equality (ISS-0033): every delivered line's cwd/transcript_path
+      // is the harness's own pin, not the committed fixture's recorded values —
+      // strip both before the none-lost/none-duplicated multiset comparison,
+      // then verify the pin separately.
+      function stripPin(line: string): string {
+        try {
+          const obj = JSON.parse(line) as Record<string, unknown>;
+          delete obj.cwd;
+          delete obj.transcript_path;
+          return JSON.stringify(obj);
+        } catch {
+          return line;
+        }
+      }
+
       const recordedTexts = recorded
         .map((entry) => Buffer.from(entry.base64, "base64").toString("utf8"))
+        .map(stripPin)
         .sort();
-      const expectedTexts = [...expectedLines].sort();
+      const expectedTexts = expectedLines.map(stripPin).sort();
       expect(recordedTexts).toEqual(expectedTexts);
+
+      for (const entry of recorded) {
+        const delivered = JSON.parse(Buffer.from(entry.base64, "base64").toString("utf8")) as Record<string, unknown>;
+        expect(delivered.cwd).toBe(pinTarget);
+      }
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }

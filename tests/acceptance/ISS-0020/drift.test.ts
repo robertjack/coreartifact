@@ -110,11 +110,11 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
   it(
     "R7 Drift detector. Whenever ingest degrades a facet to ABSENT, it records an absence reason naming the facet and the missing/mismatched source (the fragile-dependency register is the enumeration). Replaying a hand-authored stream with model stripped from SessionStart yields kind ABSENT plus an absence record naming the missing key. Absence records survive ledger rebuild (derived from the spool).",
     async () => {
-      const { paths, command, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, runLog } = await setupRepo(tmpRepos);
 
       const driftLines = buildDriftStream();
       const driftSessionId = sessionIdOf(driftLines[0]!);
-      await replayLines(driftLines, command);
+      await replayLines(driftLines, repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);
@@ -156,7 +156,7 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
   it(
     "The drift fixture is the interactive stream with model stripped from its SessionStart: its surviving prompt_input_exit end-reason contradicts a headless classification, so the session's kind records ABSENT with the absence reason model absent, contradicted by end-reason — while the unmodified headless stream, which also lacks model, still classifies headless with no absence row (real headless sessions never regress).",
     async () => {
-      const { paths, command, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, runLog } = await setupRepo(tmpRepos);
 
       // Independent-oracle sanity check on the raw fixture bytes (verified by
       // execution 2026-07-16): the interactive SessionEnd's surviving reason
@@ -172,7 +172,7 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
       ).toBe("prompt_input_exit");
 
       const driftSessionId = sessionIdOf(driftLines[0]!);
-      await replayLines(driftLines, command);
+      await replayLines(driftLines, repo.root);
 
       // Non-regression control: the UNMODIFIED headless stream also lacks
       // `model` on its SessionStart, but its end-reason ("other") is
@@ -185,7 +185,7 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
         "test setup invariant: the headless fixture's SessionStart must not carry a model key",
       ).toBeUndefined();
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
-      await replayFixtures("headless", command);
+      await replayFixtures("headless", repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);
@@ -224,7 +224,7 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
   it(
     "A stream with no SessionStart line at all yields kind ABSENT with the absence reason no SessionStart captured.",
     async () => {
-      const { paths, command, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, runLog } = await setupRepo(tmpRepos);
 
       // The no-SessionStart case: a loaded stream with its SessionStart line
       // dropped in memory (never a hand-authored line).
@@ -233,7 +233,7 @@ describe("ISS-0020 drift detector: ABSENT always names its why", () => {
       if (!secondLine) throw new Error("test setup invariant: headless fixture has too few lines to drop SessionStart from");
       const noStartSessionId = sessionIdOf(secondLine);
 
-      await replayLines(linesWithoutStart, command);
+      await replayLines(linesWithoutStart, repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);

@@ -130,26 +130,18 @@ function overrideSessionId(lines: string[], sessionId: string): string[] {
   return lines.map((line) => JSON.stringify({ ...JSON.parse(line), session_id: sessionId }));
 }
 
-// Pins cwd (and transcript_path, when present) to values under this test's
-// own tmpdir -- the ISS-0028 R2 escalation's own fix: recorded streams carry
-// absolute paths from the recording machine that can coincidentally exist on
-// a dev machine running this suite, fabricating a present cost or attributing
-// the session into a stale repo. Pinning makes the absence-or-presence
-// deliberate rather than assumed.
-function pinLine(line: string, cwd: string, transcriptPath: string): string {
-  const obj = JSON.parse(line) as Record<string, unknown>;
-  obj.cwd = cwd;
-  if ("transcript_path" in obj) obj.transcript_path = transcriptPath;
-  return JSON.stringify(obj);
-}
-
+// A truncated (no SessionEnd) prefix of a fixture stream -- leaves the
+// session open so the single-open check-binding rule (ISS-0017 prior art,
+// reused by ISS-0028's own Test-harness contract) binds a subsequently-run
+// `check` to it. cwd/transcript_path pinning is now the harness's own
+// replayLines duty (ISS-0033), never hand-rolled here.
 function truncatedOpenLines(fullLines: string[]): string[] {
   return fullLines.slice(0, -1);
 }
 
-async function closeHookSession(hookCommand: string[], fullLines: string[]): Promise<void> {
+async function closeHookSession(pinTarget: string, fullLines: string[], transcriptPathOverride?: string): Promise<void> {
   const last = fullLines[fullLines.length - 1]!;
-  await replayLines([last], hookCommand);
+  await replayLines([last], pinTarget, transcriptPathOverride !== undefined ? { transcriptPathOverride } : {});
 }
 
 // Hand-authors a minimal SessionStart-only envelope line and appends it
@@ -157,11 +149,13 @@ async function closeHookSession(hookCommand: string[], fullLines: string[]): Pro
 // technique (its R5/R9 tests), reused here with a configurable `source` so
 // this file can produce a kind-ABSENT session (source "clear", per the
 // ISS-0025 kind-demote-only ruling) without going through the real hook.
+// This bypasses the harness's replay pin entirely by design (never a
+// recorded fixture, so `cwd` is always this test's own live tmp-repo root).
 function appendHandAuthoredSession(
   spoolPath: string,
   ts: string,
   sessionId: string,
-  repoRoot: string,
+  pinTarget: string,
   source: string,
   transcriptPath: string | null,
 ): void {
@@ -169,7 +163,7 @@ function appendHandAuthoredSession(
     session_id: sessionId,
     hook_event_name: "SessionStart",
     source,
-    cwd: repoRoot,
+    cwd: pinTarget,
   };
   if (transcriptPath !== null) event.transcript_path = transcriptPath;
   const line = `${JSON.stringify({ v: 1, ts, event })}\n`;
@@ -207,7 +201,6 @@ describe("ISS-0032 R9 browser flow: the overview + session view seam", () => {
     }
 
     const paths = getPaths(repo.root);
-    const hookCommand = ["node", paths.hookArtifact, repo.root];
 
     const headlessLines = loadFixtureStream("headless");
     const interactiveLines = loadFixtureStream("interactive");
@@ -215,8 +208,8 @@ describe("ISS-0032 R9 browser flow: the overview + session view seam", () => {
     // A: headless, one passing bound check, cost deterministically ABSENT
     // with a recorded reason (transcript_path pinned to a nonexistent path).
     const nonexistentTranscriptA = join(repo.base, "no-such-transcript-a.jsonl");
-    const linesA = overrideSessionId(headlessLines, SESSION_A).map((l) => pinLine(l, repo.root, nonexistentTranscriptA));
-    await replayLines(truncatedOpenLines(linesA), hookCommand);
+    const linesA = overrideSessionId(headlessLines, SESSION_A);
+    await replayLines(truncatedOpenLines(linesA), repo.root, { transcriptPathOverride: nonexistentTranscriptA });
     const checkA = await runCli(["check", "i32-check-a", "--", "node", "-e", "process.exit(0)"], {
       cwd: repo.root,
       home: repo.home,
@@ -225,11 +218,11 @@ describe("ISS-0032 R9 browser flow: the overview + session view seam", () => {
     if (checkA.exitCode !== 0) {
       throw new Error(`test setup invariant: the passing check for session A must exit 0; stderr: ${checkA.stderr}`);
     }
-    await closeHookSession(hookCommand, linesA);
+    await closeHookSession(repo.root, linesA, nonexistentTranscriptA);
 
     // B: headless, one failing bound check.
     const linesB = overrideSessionId(headlessLines, SESSION_B);
-    await replayLines(truncatedOpenLines(linesB), hookCommand);
+    await replayLines(truncatedOpenLines(linesB), repo.root);
     const checkB = await runCli(["check", "i32-check-b", "--", "node", "-e", "process.exit(1)"], {
       cwd: repo.root,
       home: repo.home,
@@ -238,13 +231,13 @@ describe("ISS-0032 R9 browser flow: the overview + session view seam", () => {
     if (checkB.exitCode !== 1) {
       throw new Error(`test setup invariant: the failing check for session B must exit 1; stderr: ${checkB.stderr}`);
     }
-    await closeHookSession(hookCommand, linesB);
+    await closeHookSession(repo.root, linesB);
 
     // C: headless, zero bound checks.
-    await replayLines(overrideSessionId(headlessLines, SESSION_C), hookCommand);
+    await replayLines(overrideSessionId(headlessLines, SESSION_C), repo.root);
 
     // D: interactive.
-    await replayLines(overrideSessionId(interactiveLines, SESSION_D), hookCommand);
+    await replayLines(overrideSessionId(interactiveLines, SESSION_D), repo.root);
 
     // E: hand-authored kind-ABSENT (source "clear", no transcript at all).
     const nowIso = new Date().toISOString();

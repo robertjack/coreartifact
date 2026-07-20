@@ -156,23 +156,14 @@ function httpGetJson(baseUrl: string, path: string): Promise<HttpJsonResult> {
   });
 }
 
-// Overrides session_id (and optionally cwd/transcript_path) on every raw
-// hook-payload line of an already-loaded fixture stream -- mirrors
-// ISS-0028's own overrideSessionId/pinLineToRepo helpers, generalized to one
-// function since this file needs both independently and together.
-function seedLines(
-  rawLines: string[],
-  overrides: { sessionId: string; cwd?: string; transcriptPath?: string },
-): string[] {
-  return rawLines.map((line) => {
-    const obj = JSON.parse(line) as Record<string, unknown>;
-    obj.session_id = overrides.sessionId;
-    if (overrides.cwd !== undefined) obj.cwd = overrides.cwd;
-    if (overrides.transcriptPath !== undefined && "transcript_path" in obj) {
-      obj.transcript_path = overrides.transcriptPath;
-    }
-    return JSON.stringify(obj);
-  });
+// Overrides session_id on every raw hook-payload line of an already-loaded
+// fixture stream -- cwd/transcript_path pinning is now the harness's own
+// replayLines duty (ISS-0033); this file only ever needs the session_id
+// override (and, in R2, a transcript_path override expressed through
+// replayLines' own transcriptPathOverride option, never hand-rolled here).
+// Mirrors ISS-0028/ISS-0032's own overrideSessionId precedent.
+function overrideSessionId(rawLines: string[], sessionId: string): string[] {
+  return rawLines.map((line) => JSON.stringify({ ...JSON.parse(line), session_id: sessionId }));
 }
 
 // A truncated (no SessionEnd) prefix of already-seeded lines -- leaves the
@@ -185,9 +176,13 @@ function truncatedOpen(seededLines: string[]): string[] {
 
 // Replays just the final (SessionEnd) line of already-seeded lines --
 // closes a session previously opened via truncatedOpen.
-async function closeSession(hookCommand: string[], seededLines: string[]): Promise<void> {
+async function closeSession(
+  pinTarget: string,
+  seededLines: string[],
+  transcriptPathOverride?: string,
+): Promise<void> {
   const last = seededLines[seededLines.length - 1]!;
-  await replayLines([last], hookCommand);
+  await replayLines([last], pinTarget, transcriptPathOverride !== undefined ? { transcriptPathOverride } : {});
 }
 
 // Recursively searches an arbitrary JSON value for a string that equals or
@@ -309,17 +304,15 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sessionId = "iss29-r1-facets";
 
       // buildSubstitutedTranscript already rewrites transcript_path to a
-      // tmpdir copy of the real cost-headless transcript; pinning cwd too
-      // guards against the exact leftover-recording-machine-path hazard
-      // ISS-0028's own escalation rescue named (a recorded absolute cwd
-      // that happens to still exist on this machine).
-      const { lines } = buildSubstitutedTranscript("cost-headless", repo.root);
-      const seeded = seedLines(lines, { sessionId, cwd: repo.root });
-      await replayLines(seeded, hookCommand);
+      // tmpdir copy of the real cost-headless transcript; the harness's own
+      // replayLines pins cwd to repo.root by construction (ISS-0033) and
+      // the transcriptPathOverride option preserves the substituted copy.
+      const { lines, transcriptPath } = buildSubstitutedTranscript("cost-headless", repo.root);
+      const seeded = overrideSessionId(lines, sessionId);
+      await replayLines(seeded, repo.root, { transcriptPathOverride: transcriptPath });
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -384,7 +377,6 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sessionId = "iss29-r2-checks-tests-footprint-absences";
       const footprintPath = join(repo.root, "iss29-footprint-note.txt");
 
@@ -395,15 +387,11 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       // (which asserts the PRESENT-cost side of the same contract).
       const vitestLines = loadFixtureStream("vitest");
       const nonexistentTranscript = join(repo.root, "iss29-r2-no-such-transcript.jsonl");
-      const seeded = seedLines(vitestLines, {
-        sessionId,
-        cwd: repo.root,
-        transcriptPath: nonexistentTranscript,
-      });
+      const seeded = overrideSessionId(vitestLines, sessionId);
 
       // Leave the session open (drop the final SessionEnd line) so the two
       // `check` invocations below bind via the single-open rule.
-      await replayLines(truncatedOpen(seeded), hookCommand);
+      await replayLines(truncatedOpen(seeded), repo.root, { transcriptPathOverride: nonexistentTranscript });
 
       const passingCheck = await runCli(["check", "iss29-c2-pass", "--", "node", "-e", "process.exit(0)"], {
         cwd: repo.root,
@@ -439,9 +427,11 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
         tool_response: { type: "create", filePath: footprintPath, content: "iss29 footprint probe\n" },
         duration_ms: 5,
       };
-      await replayLines([JSON.stringify(preWrite), JSON.stringify(postWrite)], hookCommand);
+      await replayLines([JSON.stringify(preWrite), JSON.stringify(postWrite)], repo.root, {
+        transcriptPathOverride: nonexistentTranscript,
+      });
 
-      await closeSession(hookCommand, seeded);
+      await closeSession(repo.root, seeded, nonexistentTranscript);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -529,14 +519,13 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       // Session A: the full headless fixture (SubagentStart/Stop present) --
       // proves spool-seq ordering and the four nesting keys passed through
       // verbatim, null where the event has none.
       const sessionA = "iss29-r3-timeline-nesting";
       const headlessLines = loadFixtureStream("headless");
-      await replayLines(seedLines(headlessLines, { sessionId: sessionA }), hookCommand);
+      await replayLines(overrideSessionId(headlessLines, sessionA), repo.root);
 
       // Session B: the background fixture, truncated to just the
       // backgrounding PostToolUse (no TaskOutput poll ever replayed) then
@@ -544,9 +533,9 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       // anywhere in the session, so its outcome must stay absent, honestly.
       const sessionB = "iss29-r3-backgrounded-absent";
       const backgroundLines = loadFixtureStream("background");
-      const seededB = seedLines(backgroundLines, { sessionId: sessionB });
-      await replayLines(seededB.slice(0, 4), hookCommand);
-      await closeSession(hookCommand, seededB);
+      const seededB = overrideSessionId(backgroundLines, sessionB);
+      await replayLines(seededB.slice(0, 4), repo.root);
+      await closeSession(repo.root, seededB);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -641,7 +630,6 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sessionId = "iss29-r4-kind-absent";
 
       // "clear-source" is not one of the loader's typed ScenarioNames (it is
@@ -650,7 +638,7 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       // loadRawFixtureLines helper for this exact file.
       const rawText = readFileSync(join(REPO_ROOT, "tests/fixtures/clear-source.jsonl"), "utf8");
       const rawLines = rawText.split("\n").filter((l) => l.trim().length > 0);
-      await replayLines(seedLines(rawLines, { sessionId }), hookCommand);
+      await replayLines(overrideSessionId(rawLines, sessionId), repo.root);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -681,8 +669,7 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
-      await replayLines(seedLines(loadFixtureStream("headless"), { sessionId: "iss29-r5-known-session" }), hookCommand);
+      await replayLines(overrideSessionId(loadFixtureStream("headless"), "iss29-r5-known-session"), repo.root);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -711,13 +698,11 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
 
       const pathsA = getPaths(repoA.root);
       const pathsB = getPaths(repoB.root);
-      const hookCommandA = ["node", pathsA.hookArtifact, repoA.root];
-      const hookCommandB = ["node", pathsB.hookArtifact, repoB.root];
 
       const ambiguousId = "iss29-r5-ambiguous-session";
       const interactiveLines = loadFixtureStream("interactive");
-      await replayLines(seedLines(interactiveLines, { sessionId: ambiguousId }), hookCommandA);
-      await replayLines(seedLines(interactiveLines, { sessionId: ambiguousId }), hookCommandB);
+      await replayLines(overrideSessionId(interactiveLines, ambiguousId), repoA.root);
+      await replayLines(overrideSessionId(interactiveLines, ambiguousId), repoB.root);
 
       const openedAmbig = await openServerFor(repoA.home, repoA.registryPath, repoA.root);
       try {
@@ -750,7 +735,6 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -759,7 +743,7 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
         expect(before.body?.sessions?.total, "sessions.total must be 0 before any session is seeded").toBe(0);
 
         const sessionId = "iss29-r6-freshness";
-        await replayLines(seedLines(loadFixtureStream("headless"), { sessionId }), hookCommand);
+        await replayLines(overrideSessionId(loadFixtureStream("headless"), sessionId), repo.root);
 
         const afterOverview = await httpGetJson(opened.url, "/api/overview");
         expect(
@@ -797,9 +781,8 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sessionId = "iss29-r7-concurrency";
-      await replayLines(seedLines(loadFixtureStream("headless"), { sessionId }), hookCommand);
+      await replayLines(overrideSessionId(loadFixtureStream("headless"), sessionId), repo.root);
 
       const opened = await openServerFor(repo.home, repo.registryPath, repo.root);
       try {
@@ -817,7 +800,7 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
         // GET's ingest-on-read MUST write the new projection under the
         // holder's BEGIN IMMEDIATE — busy_timeout is now load-bearing.
         const contendedId = "iss29-r7-contended";
-        await replayLines(seedLines(loadFixtureStream("headless"), { sessionId: contendedId }), hookCommand);
+        await replayLines(overrideSessionId(loadFixtureStream("headless"), contendedId), repo.root);
 
         const holdMs = 2_000;
         const holder = await spawnLedgerHolder(paths.ledger, holdMs);
@@ -864,9 +847,8 @@ describe("ISS-0029 GET /api/session/<id>: facets, checks, timeline, freshness, c
       const repo = await makeRepo();
       await initRepo(repo);
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
       const sessionId = "iss29-r8-zero-write";
-      await replayLines(seedLines(loadFixtureStream("headless"), { sessionId }), hookCommand);
+      await replayLines(overrideSessionId(loadFixtureStream("headless"), sessionId), repo.root);
 
       const treeBefore = snapshotOutsideCoreartifact(repo.root);
       const registryBefore = existsSync(repo.registryPath) ? readFileSync(repo.registryPath) : Buffer.alloc(0);

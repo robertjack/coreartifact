@@ -20,6 +20,10 @@
 // the corrupt-line.jsonl precedent (tests/fixtures/corrupt-line.jsonl /
 // tests/acceptance/ISS-0002/fixtures.test.ts's readNonEmptyLines), since
 // clear-source.jsonl is deliberately excluded from tests/fixtures/manifest.json.
+//
+// The harness's own replayLines pins cwd/transcript_path by construction
+// (ISS-0033) — every call below relies on that pin, never a per-file cwd
+// rebase.
 import { describe, it, expect, afterAll } from "vitest";
 import { rmSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -72,10 +76,15 @@ function sessionIdOf(fixtureLine: string): string {
   return parsed.session_id;
 }
 
-function transformLines(lines: string[], fn: (obj: Record<string, unknown>) => void): string[] {
+// Rewrites each line's parsed JSON via `fn`, mirroring ISS-0018's own
+// rebaseCwdOntoRepo but generalized to whatever non-pin field a given phase
+// needs to override (this file only ever overrides SessionStart's `source`
+// key) — every other recorded field stays exactly as-is. cwd/transcript_path
+// are never touched here: the harness's own replayLines pins those.
+function transformSessionStart(lines: string[], fn: (obj: Record<string, unknown>) => void): string[] {
   return lines.map((line) => {
     const parsed = JSON.parse(line) as Record<string, unknown>;
-    fn(parsed);
+    if (parsed.hook_event_name === "SessionStart") fn(parsed);
     return JSON.stringify(parsed);
   });
 }
@@ -100,7 +109,6 @@ function readClearSourceFixtureLines(): string[] {
 async function setupRepo(tmpRepos: TmpRepo[]): Promise<{
   repo: TmpRepo;
   paths: ReturnType<typeof getPaths>;
-  command: string[];
   opts: { cwd: string; home: string; registryPath: string };
   runLog: () => ReturnType<typeof runCli>;
 }> {
@@ -110,11 +118,10 @@ async function setupRepo(tmpRepos: TmpRepo[]): Promise<{
   expect(initResult.exitCode, `test setup invariant: init did not exit 0; stderr: ${initResult.stderr}`).toBe(0);
 
   const paths = getPaths(repo.root);
-  const command = ["node", paths.hookArtifact, repo.root];
   const opts = { cwd: repo.root, home: repo.home, registryPath: repo.registryPath };
   const runLog = () => runCli(["log"], opts);
 
-  return { repo, paths, command, opts, runLog };
+  return { repo, paths, opts, runLog };
 }
 
 describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sources", () => {
@@ -129,7 +136,7 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
   it(
     "Aggregating a session whose SessionStart carries a source key other than 'startup' (the recorded real case: 'clear') and NO model key yields kind ABSENT — never headless — with an absence reason that names the unverified source mode (the reason string includes the observed source value); the reason literal is a new member of KIND_ABSENCE_REASONS and is accepted by the absence-record contract's reason validation.",
     async () => {
-      const { paths, command, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, runLog } = await setupRepo(tmpRepos);
 
       // Independent-oracle sanity check on the raw fixture bytes: the
       // committed headless stream's SessionStart lacks model and carries
@@ -152,13 +159,11 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
       // Derived in memory only (never committed): the headless stream with
       // SessionStart's source overridden to the recorded real non-startup
       // case, "clear" — model stays absent throughout.
-      const clearSourceLines = transformLines(headlessLines, (obj) => {
-        if (obj.hook_event_name === "SessionStart") {
-          obj.source = "clear";
-        }
+      const clearSourceLines = transformSessionStart(headlessLines, (obj) => {
+        obj.source = "clear";
       });
       const sessionId = sessionIdOf(clearSourceLines[0]!);
-      await replayLines(clearSourceLines, command);
+      await replayLines(clearSourceLines, repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);
@@ -197,7 +202,7 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
   it(
     "Aggregating a session whose SessionStart carries NO source key at all and no model key yields kind ABSENT with the same reason family (source reported as absent), never a classified kind — an unobserved start mode is never classified.",
     async () => {
-      const { paths, command, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, runLog } = await setupRepo(tmpRepos);
 
       const headlessLines = loadFixtureStream("headless");
       const headlessStart = JSON.parse(headlessLines[0]!) as Record<string, unknown>;
@@ -214,13 +219,11 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
       // source key removed entirely — model stays absent throughout, and
       // (unlike the no-SessionStart-at-all case) a SessionStart line IS
       // present, it just names no source mode.
-      const noSourceLines = transformLines(headlessLines, (obj) => {
-        if (obj.hook_event_name === "SessionStart") {
-          delete obj.source;
-        }
+      const noSourceLines = transformSessionStart(headlessLines, (obj) => {
+        delete obj.source;
       });
       const sessionId = sessionIdOf(noSourceLines[0]!);
-      await replayLines(noSourceLines, command);
+      await replayLines(noSourceLines, repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);
@@ -259,7 +262,7 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
   it(
     "At the acceptance seam: replaying a hand-authored stream whose SessionStart has source 'clear' and no model (timestamps UTC-Z per PRD-0003 Amendment 1; the stream lives outside the typed fixture manifest, corrupt-line precedent) yields a session that log/show render with the explicit absent kind marker, doctor reports with the new absence reason, and whose absence record survives deleting the ledger and re-ingesting (pure projection, rebuildable from the spool).",
     async () => {
-      const { paths, command, opts, runLog } = await setupRepo(tmpRepos);
+      const { repo, paths, opts, runLog } = await setupRepo(tmpRepos);
 
       const lines = readClearSourceFixtureLines();
       expect(
@@ -282,7 +285,7 @@ describe("ISS-0025 kind classifier: demote-only on non-startup SessionStart sour
       ).toBeUndefined();
 
       const sessionId = sessionIdOf(lines[0]!);
-      await replayLines(lines, command);
+      await replayLines(lines, repo.root);
 
       const logResult = await runLog();
       expect(logResult.exitCode, `log did not exit 0; stderr: ${logResult.stderr}`).toBe(0);

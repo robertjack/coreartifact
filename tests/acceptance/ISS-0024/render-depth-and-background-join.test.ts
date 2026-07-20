@@ -6,7 +6,9 @@
 // readLedger) plus the fixtures layer's already-shipped typed access
 // (../../fixtures/loader.js's loadFixtureStream) and the transcript-
 // substituting replay wrapper (../../fixtures/transcriptReplay.js's
-// buildSubstitutedTranscript) for cost-present sessions.
+// buildSubstitutedTranscript) for cost-present sessions. The harness's own
+// replayLines pins cwd/transcript_path by construction (ISS-0033); a
+// substituted transcript's own path survives via transcriptPathOverride.
 //
 // No module this issue touches (src/render/log.ts, src/render/show.ts,
 // src/facets/outcome.ts, src/ingest/**) is imported directly — every
@@ -23,12 +25,11 @@
 // probe metadata — read directly here (the typed loader's TranscriptPair
 // does not surface `probe`), never re-derived by hand-parsing the stream.
 import { describe, it, expect, afterAll } from "vitest";
-import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createTmpRepo, runCli, replayLines, readLedger, type TmpRepo } from "../harness/index.js";
+import { createTmpRepo, runCli, replayLines, readLedger, type ReplayOptions, type TmpRepo } from "../harness/index.js";
 import { loadFixtureStream } from "../../fixtures/loader.js";
 import { buildSubstitutedTranscript } from "../../fixtures/transcriptReplay.js";
 import { getPaths } from "../../../src/core/paths.js";
@@ -56,6 +57,14 @@ function readBackgroundProbe(): BackgroundProbe {
   return pair.probe;
 }
 
+// Seeding invariant carried by the pre-ISS-0033 replayLinesThroughHook
+// helper: capture exits 0 for every replayed line.
+async function replayExpectingExit0(lines: string[], pinTarget: string, options?: ReplayOptions): Promise<void> {
+  for (const invocation of await replayLines(lines, pinTarget, options)) {
+    expect(invocation.exitCode, "a hook invocation of a replayed fixture line did not exit 0").toBe(0);
+  }
+}
+
 function sessionIdOf(fixtureLine: string): string {
   const parsed = JSON.parse(fixtureLine) as { session_id?: unknown };
   if (typeof parsed.session_id !== "string" || parsed.session_id.length === 0) {
@@ -70,14 +79,6 @@ function sessionIdOf(fixtureLine: string): string {
 // its format.
 function shortIdOf(sessionId: string): string {
   return sessionId.slice(0, 8);
-}
-
-function transformLines(lines: string[], fn: (obj: Record<string, unknown>) => void): string[] {
-  return lines.map((line) => {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
-    fn(parsed);
-    return JSON.stringify(parsed);
-  });
 }
 
 function withSessionId(templateLine: string, sessionId: string): string {
@@ -100,32 +101,6 @@ function buildSyntheticPostToolUse(
   parsed.tool_input = { ...(parsed.tool_input as Record<string, unknown>), command: overrides.command };
   parsed.tool_response = { ...(parsed.tool_response as Record<string, unknown>), stdout: overrides.stdout };
   return JSON.stringify(parsed);
-}
-
-interface RawHookResult {
-  exitCode: number;
-}
-
-// A single raw invocation of the installed hook command — needed for the
-// truncated background replay (an explicit prefix of the recorded stream,
-// derived in-test, never a hand-authored or committed variant).
-function runRawHookInvocation(command: string[], stdinText: string): Promise<RawHookResult> {
-  const [cmd, ...args] = command;
-  if (!cmd) throw new Error("test setup invariant: empty hook command");
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
-    child.on("error", reject);
-    child.on("exit", (code) => resolvePromise({ exitCode: code ?? -1 }));
-    child.stdin.write(stdinText);
-    child.stdin.end();
-  });
-}
-
-async function replayLinesThroughHook(lines: string[], command: string[]): Promise<void> {
-  for (const line of lines) {
-    const result = await runRawHookInvocation(command, line);
-    expect(result.exitCode, "a hook invocation of a fixture line did not exit 0").toBe(0);
-  }
 }
 
 async function ingestViaLog(repo: TmpRepo): Promise<void> {
@@ -173,18 +148,12 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       // --- Session A: cost present (substituted transcript) + two explicit checks bound. ---
       const workDir = makeScratchDir("coreartifact-iss24-r12-cost-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
       const costSessionId = sessionIdOf(loadFixtureStream("cost-headless")[0]!);
-      await replayLines(
-        transformLines(substituted.lines, (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await runCli(
         ["check", "riss24-r12-pass", "--session", costSessionId, "--", "node", "-e", "process.exit(0)"],
         opts,
@@ -200,13 +169,7 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
         "nonexistent.transcript.jsonl",
       );
       const absentSessionId = sessionIdOf(loadFixtureStream("headless")[0]!);
-      await replayLines(
-        transformLines(loadFixtureStream("headless"), (obj) => {
-          obj.cwd = repo.root;
-          obj.transcript_path = missingTranscriptPath;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(loadFixtureStream("headless"), repo.root, { transcriptPathOverride: missingTranscriptPath });
 
       await ingestViaLog(repo);
 
@@ -278,16 +241,10 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       const backgroundLines = loadFixtureStream("background");
       const sessionId = sessionIdOf(backgroundLines[0]!);
-      await replayLinesThroughHook(
-        transformLines(backgroundLines, (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(backgroundLines, repo.root);
       await ingestViaLog(repo);
 
       // --- ingest promotes background_task_id onto both the backgrounding event and the completed TaskOutput event. ---
@@ -342,17 +299,11 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       const workDir = makeScratchDir("coreartifact-iss24-log-cost-");
       const substituted = buildSubstitutedTranscript("cost-headless", workDir);
       const costSessionId = sessionIdOf(loadFixtureStream("cost-headless")[0]!);
-      await replayLines(
-        transformLines(substituted.lines, (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await runCli(
         ["check", "riss24-log-pass", "--session", costSessionId, "--", "node", "-e", "process.exit(0)"],
         opts,
@@ -367,13 +318,7 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
         "nonexistent.transcript.jsonl",
       );
       const absentSessionId = sessionIdOf(loadFixtureStream("headless")[0]!);
-      await replayLines(
-        transformLines(loadFixtureStream("headless"), (obj) => {
-          obj.cwd = repo.root;
-          obj.transcript_path = missingTranscriptPath;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(loadFixtureStream("headless"), repo.root, { transcriptPathOverride: missingTranscriptPath });
 
       await ingestViaLog(repo);
 
@@ -414,18 +359,12 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const hookCommand = ["node", paths.hookArtifact, repo.root];
 
       // --- Session A: real cost + real test-results facet + two bound checks. ---
       const workDir = makeScratchDir("coreartifact-iss24-show-vitest-");
       const substituted = buildSubstitutedTranscript("vitest", workDir);
       const vitestSessionId = sessionIdOf(loadFixtureStream("vitest")[0]!);
-      await replayLines(
-        transformLines(substituted.lines, (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(substituted.lines, repo.root, { transcriptPathOverride: substituted.transcriptPath });
       await runCli(
         ["check", "riss24-show-pass", "--session", vitestSessionId, "--", "node", "-e", "process.exit(0)"],
         opts,
@@ -447,21 +386,11 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
           " Test Files  1 passed (1)\n      Tests  0 passed (0)\n   Duration  9ms (transform 1ms, setup 0ms, import 1ms, tests 0ms, environment 0ms)",
       });
       const endLine = withSessionId(vitestLines[7]!, zeroTestsSessionId);
-      await replayLinesThroughHook(
-        transformLines([startLine, zeroTestsLine, endLine], (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0([startLine, zeroTestsLine, endLine], repo.root);
 
       // --- Session C: no test-results facet whatsoever (headless: no vitest command anywhere in the stream). ---
       const headlessSessionId = sessionIdOf(loadFixtureStream("headless")[0]!);
-      await replayLines(
-        transformLines(loadFixtureStream("headless"), (obj) => {
-          obj.cwd = repo.root;
-        }),
-        hookCommand,
-      );
+      await replayExpectingExit0(loadFixtureStream("headless"), repo.root);
 
       await ingestViaLog(repo);
 
@@ -520,16 +449,9 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
       const optsFull = { cwd: repoFull.root, home: repoFull.home, registryPath: repoFull.registryPath };
       const initFull = await runCli(["init"], optsFull);
       expect(initFull.exitCode, `test setup invariant: init did not exit 0; stderr: ${initFull.stderr}`).toBe(0);
-      const pathsFull = getPaths(repoFull.root);
-      const hookCommandFull = ["node", pathsFull.hookArtifact, repoFull.root];
 
       const fullSessionId = sessionIdOf(backgroundLines[0]!);
-      await replayLinesThroughHook(
-        transformLines(backgroundLines, (obj) => {
-          obj.cwd = repoFull.root;
-        }),
-        hookCommandFull,
-      );
+      await replayExpectingExit0(backgroundLines, repoFull.root);
       await ingestViaLog(repoFull);
 
       const showFull = await runCli(["show", fullSessionId], optsFull);
@@ -570,15 +492,8 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
         initTruncated.exitCode,
         `test setup invariant: init did not exit 0; stderr: ${initTruncated.stderr}`,
       ).toBe(0);
-      const pathsTruncated = getPaths(repoTruncated.root);
-      const hookCommandTruncated = ["node", pathsTruncated.hookArtifact, repoTruncated.root];
 
-      await replayLinesThroughHook(
-        transformLines(truncatedLines, (obj) => {
-          obj.cwd = repoTruncated.root;
-        }),
-        hookCommandTruncated,
-      );
+      await replayExpectingExit0(truncatedLines, repoTruncated.root);
       await ingestViaLog(repoTruncated);
 
       const showTruncated = await runCli(["show", fullSessionId], optsTruncated);

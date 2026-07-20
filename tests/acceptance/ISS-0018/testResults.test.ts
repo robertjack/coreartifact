@@ -25,12 +25,13 @@
 // shape to type a plain `db.prepare(...).all()` query — the same style
 // ../harness/readers.ts already uses for sessions/events/footprint.
 import { describe, it, expect, afterAll } from "vitest";
-import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import {
   createTmpRepo,
   runCli,
+  replayLines,
   readLedger,
+  type ReplayOptions,
   type TmpRepo,
 } from "../harness/index.js";
 import { loadFixtureStream } from "../../fixtures/loader.js";
@@ -38,57 +39,13 @@ import { getPaths } from "../../../src/core/paths.js";
 import { openLedger, type TestResultRow, type EventRow } from "../../../src/core/ledger.js";
 import { getAllAbsences, type AbsenceRow } from "../../../src/core/absence.js";
 
-interface RawHookResult {
-  exitCode: number;
-}
-
-// A single raw invocation of the installed hook command with caller-supplied
-// stdin bytes — needed to inject synthetic-but-realistic payload variants
-// (a zero-tests vitest summary, a summary with no Duration line) that the
-// recorded fixture stream does not itself contain. Mirrors ISS-0007/
-// ISS-0008's own `runRawHookInvocation` helper.
-function runRawHookInvocation(command: string[], stdinText: string): Promise<RawHookResult> {
-  const [cmd, ...args] = command;
-  if (!cmd) throw new Error("runRawHookInvocation: empty command");
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      resolvePromise({ exitCode: code ?? -1 });
-    });
-    child.stdin.write(stdinText);
-    child.stdin.end();
-  });
-}
-
-// Rebases EVERY line's `cwd` onto a live repo before replay — a stricter
-// version of ISS-0008's own `rebaseBoundaryCwdOntoRepo`, which only touched
-// SessionStart/SessionEnd. capture.ts's resolveRepoRoot(cwd, initRoot) runs
-// per EVENT, not just per boundary event: on this machine (the very box the
-// vitest fixture was recorded on), the recorded cwd
-// (.../scratchpad/vitest-repo) is a real, still-present git repo, so an
-// un-rebased replay resolves repo root to THAT leftover directory instead of
-// this test's own tmp repo and silently writes the spool line there —
-// nothing lands in `paths.spool` at all (verified by execution: the plain
-// headless fixture's recorded cwd is dead on this machine and needs no
-// rebase, but vitest's is not). Every other field stays exactly as recorded.
-function rebaseCwdOntoRepo(lines: string[], repoRoot: string): string[] {
-  return lines.map((line) => {
-    const parsed = JSON.parse(line) as Record<string, unknown>;
-    parsed.cwd = repoRoot;
-    return JSON.stringify(parsed);
-  });
-}
-
-// Sequentially replays already-loaded (and possibly rebased) fixture lines
-// through the installed hook command, one invocation per line, in order —
-// mirrors the harness's own replayFixtures but over caller-supplied lines.
-async function replayLinesThroughHook(lines: string[], command: string[]): Promise<void> {
-  for (const line of lines) {
-    const result = await runRawHookInvocation(command, line);
-    expect(result.exitCode, "a hook invocation of a rebased fixture line did not exit 0").toBe(0);
-  }
-}
+// capture.ts's resolveRepoRoot(cwd, initRoot) runs per EVENT: on the very
+// box the vitest fixture was recorded on, its recorded cwd
+// (.../scratchpad/vitest-repo) is a real, still-present git repo, so a
+// verbatim replay would resolve repo root to THAT leftover directory
+// instead of this test's own tmp repo (the exact hazard ISS-0033's harness
+// pin exists to rule out by construction) — every replay below goes
+// through the harness's own replayLines, which pins cwd to repo.root.
 
 function sessionIdOf(fixtureLine: string): string {
   const parsed = JSON.parse(fixtureLine) as { session_id?: unknown };
@@ -96,6 +53,14 @@ function sessionIdOf(fixtureLine: string): string {
     throw new Error("test setup invariant: fixture line has no session_id");
   }
   return parsed.session_id;
+}
+
+// Seeding invariant carried by the pre-ISS-0033 replayLinesThroughHook
+// helper: capture exits 0 for every replayed line.
+async function replayExpectingExit0(lines: string[], pinTarget: string, options?: ReplayOptions): Promise<void> {
+  for (const invocation of await replayLines(lines, pinTarget, options)) {
+    expect(invocation.exitCode, "a hook invocation of a replayed fixture line did not exit 0").toBe(0);
+  }
 }
 
 // Rewrites only `session_id` on a fixture line's JSON — used to graft the
@@ -201,15 +166,14 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const vitestLines = loadFixtureStream("vitest");
       const vitestSessionId = sessionIdOf(vitestLines[0]!);
-      await replayLinesThroughHook(rebaseCwdOntoRepo(vitestLines, repo.root), command);
+      await replayExpectingExit0(vitestLines, repo.root);
 
       const headlessLines = loadFixtureStream("headless");
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
-      await replayLinesThroughHook(rebaseCwdOntoRepo(headlessLines, repo.root), command);
+      await replayExpectingExit0(headlessLines, repo.root);
 
       await ingestViaLog(repo);
 
@@ -279,11 +243,10 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const vitestLines = loadFixtureStream("vitest");
       const sessionId = sessionIdOf(vitestLines[0]!);
-      await replayLinesThroughHook(rebaseCwdOntoRepo(vitestLines, repo.root), command);
+      await replayExpectingExit0(vitestLines, repo.root);
       await ingestViaLog(repo);
 
       const events = readLedger(paths.ledger).events.filter((e) => e.session_id === sessionId);
@@ -337,11 +300,10 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       const vitestLines = loadFixtureStream("vitest");
       const sessionId = sessionIdOf(vitestLines[0]!);
-      await replayLinesThroughHook(rebaseCwdOntoRepo(vitestLines, repo.root), command);
+      await replayExpectingExit0(vitestLines, repo.root);
       await ingestViaLog(repo);
 
       const events = readLedger(paths.ledger).events.filter((e) => e.session_id === sessionId);
@@ -388,12 +350,11 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       expect(init.exitCode, `test setup invariant: init did not exit 0; stderr: ${init.stderr}`).toBe(0);
 
       const paths = getPaths(repo.root);
-      const command = ["node", paths.hookArtifact, repo.root];
 
       // -- a non-test command, unclaimed by any parser. --
       const headlessLines = loadFixtureStream("headless");
       const headlessSessionId = sessionIdOf(headlessLines[0]!);
-      await replayLinesThroughHook(rebaseCwdOntoRepo(headlessLines, repo.root), command);
+      await replayExpectingExit0(headlessLines, repo.root);
 
       // -- a synthetic session exercising the two branches no recorded
       // fixture line reaches: a claimed run reporting zero tests, and a
@@ -420,11 +381,7 @@ describe("ISS-0018 parser interface + the vitest parser", () => {
       });
       const endLine = withSessionId(vitestLines[7]!, syntheticSessionId);
 
-      const syntheticLines = rebaseCwdOntoRepo(
-        [startLine, zeroTestsLine, durationAbsentLine, endLine],
-        repo.root,
-      );
-      await replayLinesThroughHook(syntheticLines, command);
+      await replayExpectingExit0([startLine, zeroTestsLine, durationAbsentLine, endLine], repo.root);
 
       await ingestViaLog(repo);
 
