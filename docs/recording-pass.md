@@ -384,3 +384,92 @@ defined; the hole is exactly the non-`startup` source modes.
 2. **Tested range bumped 2.1.208–2.1.212** (spec stance + the
    `TESTED_CLAUDE_CODE_RANGE` constant + its deliberate-tripwire test
    pin, amended together — the gotcha #7 remedy, exercised as designed).
+
+---
+
+# Recording pass 2.1.215 — findings (2026-07-20)
+
+Recorded on **Claude Code 2.1.215**, macOS, per the established
+nested-agent protocol (scoped `--allowedTools`, `CLAUDE*` env unset,
+per-scenario `REC_STREAM`, nine-event `jq -c` recorder,
+`vitest.config.mts` pinned at the scratch root). Trigger: the live
+drift banner — session `e5d1454c` recorded 2.1.215, outside tested
+2.1.208–2.1.212. Versions .213/.214 were never observed on this
+machine (the update jumped straight to .215). Streams and envelope
+oracles live in `tests/fixtures/recpass-2.1.215/` — deliberately
+OUTSIDE both typed manifests, per the standing precedent.
+
+## Stream status
+
+| scenario | stream | oracle |
+|---|---|---|
+| headless, default model | `headless-default.jsonl` (10 events) | envelope $0.454621 + transcript pair |
+| headless, `--model haiku` | `headless-haiku.jsonl` (6 events) | envelope $0.0241008 (control cell) |
+| background, explicit poll | `background.jsonl` (12 events) | envelope $0.503359 |
+| vitest pass+fail | `vitest.jsonl` (8 events) | envelope $0.422169 |
+
+## FINDING 12: the fragile register holds on 2.1.215 — every scripted cell clean
+
+- **Kind cells**: both headless streams carry NO `model` and
+  `source: "startup"` — plus four live dogfood worker sessions on .215
+  (`e5d1454c`, `642aad37`, `3b861cb6`, `f73f837d`) with the identical
+  shape straight from the production spool: n=6 for the headless cell.
+  The ISS-0025 demote-only classifier needs no change.
+- **Transcript/cost**: usage on `assistant` lines; `requestId` dedup
+  reproduces the envelope **exactly** (8 in / 639 out / 101,231
+  cache-read / 16,068 cache-creation across 4 requests; 6 assistant
+  lines — dedup still mandatory, 1.5× over-count without). Transcript
+  self-identifies `version: "2.1.215"`. Still no cost key anywhere in
+  the transcript.
+- **Vitest, both payload paths**: passing run in
+  `tool_response.stdout` — plain text, no ANSI, stable summary lines;
+  failing run as `PostToolUseFailure` with NO `tool_response`, full
+  output (summary + failed test names) embedded after
+  `"Exit code 1\n\n"`, no ANSI.
+- **Command outcome**: `error` embeds `Exit code N`; `duration_ms` and
+  `prompt_id` present on Post events.
+- **`claude --version`** → `2.1.215 (Claude Code)`: first-token parse
+  holds.
+- **Bash `tool_response` key set unchanged from .212**
+  (`backgroundTaskId, interrupted, isImage, noOutputExpected, stderr,
+  stdout` — nothing new in these streams).
+- Envelope-side additive only (invoker-visible, no consumer):
+  `usage.cache_creation.{ephemeral_1h,ephemeral_5m}_input_tokens`,
+  `iterations`, `inference_geo`, `speed`.
+
+## FINDING 13: TaskOutput fires on explicit poll on 2.1.215 — and the in-flight-poll case is now on record
+
+Finding 10 (.212) observed the notification-prompt flow where NO
+`TaskOutput` ever fires. On .215, a session told to poll explicitly
+DOES emit `PostToolUse(TaskOutput)` with the full join shape:
+`tool_input.task_id` = the backgrounding event's `backgroundTaskId`
+(`bhl28jtd6`), `tool_response.task.{status, output, exitCode}` =
+`completed` / `PROBE_DONE\n` / `0`. The R14 join resolves when fed —
+finding 10's stance is unchanged (unfed joins stay ABSENT, honestly).
+
+New on record: the stream carries an **in-flight poll**
+(`status: "running"`, `exitCode` null) BEFORE the completed one —
+the first recorded instance of the case
+`deriveBackgroundedOutcome`'s skip rule was written for (previously
+code-comment-only). `background.jsonl` is a regression-fixture
+candidate for that skip path. Protocol note: the .215 session loaded
+`TaskOutput` via a `ToolSearch` tool call before polling —
+ToolSearch Pre/PostToolUse events now appear in streams; captured
+verbatim, no consumer.
+
+## Outstanding cells + range stance
+
+- **Interactive fresh keyboard startup on .215: UNRECORDED** — the
+  kind register's interactive discriminating cell. Note: the operator
+  session driving this pass still runs the .212 binary (its transcript
+  self-identifies 2.1.212; `claude -p` children resolve .215), so no
+  live .215 interactive evidence exists yet. The range bump WAITS on
+  this cell, per the finding-9 precedent.
+- **`/clear` on .215: unrecorded, no bump dependency** — the
+  demote-only ruling degrades any non-startup source to ABSENT
+  regardless of version.
+- **Crash variants + subagent tagging: not re-verified** — .209/.211
+  fixtures remain their evidence, per the .212 precedent.
+- Tested range stays **2.1.208–2.1.212** until the keyboard cell
+  closes; then bump the spec stance + `TESTED_CLAUDE_CODE_RANGE` +
+  its tripwire test pin together (the gotcha #7 remedy).
