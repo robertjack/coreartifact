@@ -95,3 +95,23 @@ Related: the test-author must treat module paths in the issue's
 `[files] owns` block as CONTRACT — two other escalations came from
 acceptance tests importing guessed filenames the footprint never
 granted (`checkLine.js`, `state.js`).
+
+## 8. Recorded fixtures carry live absolute paths — replay hermetically or the machine bleeds in (×3)
+
+Recorded streams embed the recording machine's absolute `cwd` and
+`transcript_path`. On this machine those leftovers still EXIST (live git
+repos in old scratchpads; transcripts at the recorded paths), so a
+verbatim replay silently attributes sessions into stale repos or
+enriches a "transcript-absent" session with a real leftover transcript
+(PRD-0003's only escalation: spend 0.0558… where the oracle said
+0.555957). Three independent hits in one campaign (ISS-0025 fixture
+authoring, ISS-0028 escalation, ISS-0029 re-confirmation). **When
+seeding by fixture replay, pin `cwd` to the tmp repo and
+`transcript_path` to a tmpdir-controlled value on every line — present
+case via buildSubstitutedTranscript, absent case via a
+guaranteed-nonexistent path INSIDE the tmpdir.** Prior art:
+ISS-0028's `pinLineToRepo`, ISS-0029's `seedLines`. The durable fix —
+fold the pin into the shared replay helper so hermeticity is by
+construction — is this retro's process change; until it lands, HOME
+overrides do NOT shield you (enrichment reads the payload's absolute
+path directly).

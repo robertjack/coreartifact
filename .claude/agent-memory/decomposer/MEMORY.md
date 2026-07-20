@@ -1,1 +1,2 @@
 - [Footprints, locked surfaces, issue sizing](feedback_footprint_locked_surfaces_sizing.md) — facet slices need the render/CLI seam in footprint; scan plans for locked-test collisions; one contract per issue; operator-lane prerequisites before dispatch.
+- [Stubs distinguishable from success](feedback_stubs_distinguishable_from_success.md) — a valid-shaped 200 stub made a downstream criterion vacuous; red-verify refused it twice; stage stubs as 501/marked-body or pin content in the downstream criteria.

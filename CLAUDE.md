@@ -124,13 +124,23 @@ findings section and the decisions log.
   demo-optics note: seed one headless session with a bound check
   before showing anyone; aeh-workers-wrap-gates-in-cart-check is the
   real fix and an aeh integration idea).
-- Next: PRD-0003 retro (fresh session, house practice; inputs — two
-  rescues, the flake trilogy incl. runner pre-flight bypass after
-  double-green, stub-200 decomposer lesson, stage-aware-resume +
-  memory-merge + gate-stdout aeh ideas filed 27299f5, sonnet-5 price
-  table gap). Then launch acts (spec list): README, LICENSE/NOTICE,
-  SECURITY.md, CI, ping receiver, write-up, the flip. S2s 132–145 +
-  S3s F1/F3 daily-lane. Geography in docs/map.md.
+- RETRO DONE (2026-07-20, docs/prd/PRD-0003-dashboard/retro.md):
+  zero footprint violations/scope changes; the PRD-0002 audit paid for
+  itself (vacuous criterion caught pre-spend, twice); green-suite rule
+  now 27 consecutive issues; the dogfood ledger debuted as a reviewer
+  source. Distilled: gotcha #8 (hermetic replay) · decomposer
+  stub-distinguishable memory · test-author seedLines memory · map.md
+  dashboard geography · ISS-0029 + ISS-0032 representative fixtures.
+  ONE process change: fold the cwd/transcript_path pin into
+  replayLines (harness-level hermeticity) — daily-lane `aeh do`,
+  BEFORE PRD-0004 dispatches.
+- Next, in order: (1) the process-change `aeh do` (replayLines pin) ·
+  (2) convert the five filed aeh ideas to PRs (27299f5+addendum,
+  fc518f8, bbe2f40, 3ff175a — PRD-0002 precedent) · (3) launch acts
+  (spec list): README, LICENSE/NOTICE, SECURITY.md, CI, ping receiver,
+  write-up, the flip. Daily-lane: sonnet-5 + <synthetic> price rows ·
+  S2s 132–145 · F1/F3 · under-load flake class. Geography in
+  docs/map.md.
 
 ## Repo conventions
 

@@ -1,4 +1,4 @@
-# Map — where things live (as of PRD-0002, 2026-07-17)
+# Map — where things live (as of PRD-0003, 2026-07-20)
 
 Vocabulary in `CONTEXT.md`; read `docs/gotchas.md` before writing any slice.
 
@@ -35,5 +35,22 @@ Vocabulary in `CONTEXT.md`; read `docs/gotchas.md` before writing any slice.
 - `tests/fixtures/` — version-stamped recorded streams + `manifest.json`
   (fixed path, never discovered) + typed `loader.ts`. `corrupt-line.jsonl`
   is the one hand-authored stream, deliberately outside the manifest.
+- `src/dashboard/` — the read-only HTTP surface (PRD-0003):
+  `server.ts` (loopback bind, GET wall, lifecycle) · `assets.ts`
+  (static SPA serving, traversal-safe) · `routes.ts` (the `/api/*`
+  registry) · `overview.ts` + `session.ts` (the two endpoints,
+  ingest-on-read via the shared walk) · `classify.ts` (the three-way
+  classification, window math, semver range) · `constants.ts` (port
+  2278, caps). Contract: docs/prd/PRD-0003-dashboard/api.md (binding).
+- `web/` — the vite+react SPA (devDeps only, built into dist at
+  publish): `src/views/Overview.tsx` + `overview/` · `Session.tsx` +
+  `session/` · `api-types.ts` (the wire shapes) · `App.tsx` (shell;
+  each view wired its own route — the shell-App seam). Design contract:
+  docs/prd/PRD-0003-dashboard/prototypes/v2-tile-led.html (frozen).
+- `tests/acceptance/ISS-0032/browser-harness.ts` — the one browser
+  seam (playwright chromium); every other criterion stays on HTTP.
+  `ISS-0029/session-and-freshness.test.ts` `seedLines` — the hermetic
+  replay pin (gotcha #8 prior art).
 - `docs/recording-pass.md` — observed platform truths (WorktreeCreate is a
-  delegation hook; `model`-on-SessionStart is the kind signal).
+  delegation hook; `model`-on-SessionStart is the kind signal, valid only
+  at `source: "startup"` — findings 9–11 for the 2.1.212 pass).
