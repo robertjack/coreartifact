@@ -148,6 +148,15 @@ findings section and the decisions log.
   on its second sighting — `prepack: pnpm run build` × ISS-0009's
   mid-suite `pnpm pack` rewrites dist while workers import it (torn
   dist); red + green gate runs both bound (checks 6311/6334).
+- Recording pass 2.1.215 (2026-07-20, findings 12–13 in
+  docs/recording-pass.md; streams at tests/fixtures/recpass-2.1.215/):
+  register holds on every scripted cell (kind headless n=6 incl. live
+  workers · dedup exact vs envelope · vitest both paths · --version
+  parse · Bash keys unchanged); TaskOutput DOES fire on explicit poll
+  (in-flight-poll skip case now on record — regression-fixture
+  candidate). OUTSTANDING: interactive fresh-keyboard cell on .215 —
+  range bump (spec + TESTED_CLAUDE_CODE_RANGE + tripwire test,
+  together) waits on it; drift banner stays up honestly until then.
 - Next, in order: (1) convert the six filed aeh ideas to PRs
   (27299f5+addendum, fc518f8, bbe2f40, 3ff175a, 31187c2 — PRD-0002
   precedent) · (2) launch acts (spec list): README, LICENSE/NOTICE,
