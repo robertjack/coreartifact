@@ -142,3 +142,16 @@ unless the caller substitutes), delete the per-file helpers, and the
 machine-leftover class is unexpressible rather than remembered. Small
 enough for the daily lane (`aeh do`, harness + touched tests
 footprint); lands before PRD-0004 dispatches anything.
+
+## Post-retro addendum (2026-07-20, found by the retro's own gate run)
+
+The retro's test gate went red on a NEW environmental class the ship
+week could not have seen: the operator's own dashboard — running since
+launch night — held port 2278, and ISS-0027's default-port test
+refuses (honestly) to run while it is bound. Dogfooding collides with
+the suite: **a user actually using the product cannot run its full
+test suite.** Daily-lane fix direction: the default-port test should
+detect-and-skip-with-reason (or bind-test on a scratch port and assert
+only the fallback contract) rather than demand the literal 2278 free.
+Both the red and green gate runs are bound checks in the live ledger,
+per the standing convention.
