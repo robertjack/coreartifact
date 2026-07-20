@@ -154,9 +154,13 @@ findings section and the decisions log.
   workers · dedup exact vs envelope · vitest both paths · --version
   parse · Bash keys unchanged); TaskOutput DOES fire on explicit poll
   (in-flight-poll skip case now on record — regression-fixture
-  candidate). OUTSTANDING: interactive fresh-keyboard cell on .215 —
-  range bump (spec + TESTED_CLAUDE_CODE_RANGE + tripwire test,
-  together) waits on it; drift banner stays up honestly until then.
+  candidate). CLOSED same day (3c89208): keyboard cell recorded (model
+  present at fresh startup; /clear reproduces no-model; NEW SessionEnd
+  reason "clear" on record) · range BUMPED 2.1.208–2.1.215 — the two
+  unit tripwires fired on the first gate run (incomplete bump caught
+  as designed, gotcha #7's third exercise), reds + green all bound ·
+  drift banner retired honestly. .213/.214 never observed (semver
+  coverage only).
 - Next, in order: (1) convert the six filed aeh ideas to PRs
   (27299f5+addendum, fc518f8, bbe2f40, 3ff175a, 31187c2 — PRD-0002
   precedent) · (2) launch acts (spec list): README, LICENSE/NOTICE,
