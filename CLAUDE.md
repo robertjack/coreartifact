@@ -134,13 +134,29 @@ findings section and the decisions log.
   ONE process change: fold the cwd/transcript_path pin into
   replayLines (harness-level hermeticity) — daily-lane `aeh do`,
   BEFORE PRD-0004 dispatches.
-- Next, in order: (1) the process-change `aeh do` (replayLines pin) ·
-  (2) convert the five filed aeh ideas to PRs (27299f5+addendum,
-  fc518f8, bbe2f40, 3ff175a — PRD-0002 precedent) · (3) launch acts
-  (spec list): README, LICENSE/NOTICE, SECURITY.md, CI, ping receiver,
-  write-up, the flip. Daily-lane: sonnet-5 + <synthetic> price rows ·
-  S2s 132–145 · F1/F3 · under-load flake class. Geography in
-  docs/map.md.
+- ISS-0033 MERGED (2026-07-20, 243a42e): hermetic replay by
+  construction — the retro's process change, PRD-0004 unblocked.
+  `aeh do` escalated on a NEW class: the write-guard acceptance lock
+  covers a tests-only issue's own footprint (zero implementation
+  faults; attempt 3 scratch-validated the whole design before
+  escalating). By-hand rescue per protocol: rulings A–D test/spec-only,
+  locked test unedited, adversarial re-review MERGE with mutation
+  proofs, findings 185–195 dispositioned, merge via the real verb
+  (eval_fixtures auto-recorded; only findings flips were manual).
+  Idea filed upstream (aeh 31187c2): dispatch-time role-lock vs
+  footprint feasibility. BONUS: the R10 stale-dist flake ROOT-CAUSED
+  on its second sighting — `prepack: pnpm run build` × ISS-0009's
+  mid-suite `pnpm pack` rewrites dist while workers import it (torn
+  dist); red + green gate runs both bound (checks 6311/6334).
+- Next, in order: (1) convert the six filed aeh ideas to PRs
+  (27299f5+addendum, fc518f8, bbe2f40, 3ff175a, 31187c2 — PRD-0002
+  precedent) · (2) launch acts (spec list): README, LICENSE/NOTICE,
+  SECURITY.md, CI, ping receiver, write-up, the flip. Daily-lane:
+  sonnet-5 + <synthetic> price rows · S2s 132–145 · F1/F3 ·
+  torn-dist flake (fix: packaging test packs with lifecycle scripts
+  ignored, or from a repo snapshot — root cause above) · ISS-0027
+  default-port test vs a running dashboard (retro addendum) ·
+  findings 194/195 breadth notes. Geography in docs/map.md.
 
 ## Repo conventions
 

@@ -112,6 +112,12 @@ case via buildSubstitutedTranscript, absent case via a
 guaranteed-nonexistent path INSIDE the tmpdir.** Prior art:
 ISS-0028's `pinLineToRepo`, ISS-0029's `seedLines`. The durable fix —
 fold the pin into the shared replay helper so hermeticity is by
-construction — is this retro's process change; until it lands, HOME
-overrides do NOT shield you (enrichment reads the payload's absolute
-path directly).
+construction — LANDED as ISS-0033 (2026-07-20, merge 243a42e): the
+replay primitives now take a required pin target, transcript_path
+defaults to a nonexistent tmpdir sentinel, and the per-file helpers are
+gone. The class is unexpressible through the harness; the one sanctioned
+local exception is ISS-0008 R8's `replayRawUnpinned` (a degradation-path
+test that NEEDS the recorded foreign cwd unresolvable — finding 195).
+HOME overrides still do NOT shield unpinned replay (enrichment reads
+the payload's absolute path directly), which is why R8's bypass stays
+confined to that one test.
