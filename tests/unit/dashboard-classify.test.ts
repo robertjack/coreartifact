@@ -95,7 +95,7 @@ describe("classify.ts: isVersionInRange (numeric, dotted-segment comparison)", (
 
   test("a version strictly below min or above max is out of range", () => {
     expect(isVersionInRange("2.1.207", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
-    expect(isVersionInRange("2.1.213", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
+    expect(isVersionInRange("2.1.216", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
   });
 
   test("comparison is numeric per segment, not lexicographic — '2.1.9' vs '2.1.10'", () => {

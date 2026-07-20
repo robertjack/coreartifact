@@ -648,7 +648,7 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
   );
 
   it(
-    "Replaying a hand-authored session whose enriched cc_version falls outside the tested range 2.1.208 to 2.1.212 makes GET /api/overview carry a drift entry naming that session_id, its version, and the range; an all-in-range session carries no drift entry; and a session whose cc_version is NULL never produces a drift entry.",
+    "Replaying a hand-authored session whose enriched cc_version falls outside the tested range 2.1.208 to 2.1.215 makes GET /api/overview carry a drift entry naming that session_id, its version, and the range; an all-in-range session carries no drift entry; and a session whose cc_version is NULL never produces a drift entry.",
     async () => {
       const repo = await makeRepo();
       await initRepo(repo);
@@ -681,7 +681,7 @@ describe("ISS-0028 GET /api/overview: the verified-delegation headline", () => {
         expect(deepContainsValue(entry, "iss28-r9-out-of-range"), "the drift entry must name the offending session_id").toBe(true);
         expect(deepContainsValue(entry, "2.1.220"), "the drift entry must name the session's actual out-of-range version").toBe(true);
         expect(deepContainsValue(entry, "2.1.208"), "the drift entry must name the tested range's minimum").toBe(true);
-        expect(deepContainsValue(entry, "2.1.212"), "the drift entry must name the tested range's maximum").toBe(true);
+        expect(deepContainsValue(entry, "2.1.215"), "the drift entry must name the tested range's maximum").toBe(true);
 
         expect(
           deepContainsValue(drift, "iss28-r9-in-range"),

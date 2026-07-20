@@ -473,3 +473,33 @@ verbatim, no consumer.
 - Tested range stays **2.1.208–2.1.212** until the keyboard cell
   closes; then bump the spec stance + `TESTED_CLAUDE_CODE_RANGE` +
   its tripwire test pin together (the gotcha #7 remedy).
+
+## Outstanding cells — CLOSED (2026-07-20, operator keyboard cell)
+
+The keyboard cell recorded
+(`recpass-2.1.215/interactive-startup.jsonl`, 12 events, two sessions,
+both transcripts self-identifying `2.1.215`):
+
+| session (2.1.215) | `model` on SessionStart | `source` |
+|---|---|---|
+| interactive, fresh keyboard startup | **present** (`claude-fable-5`) | `startup` |
+| interactive via `/clear` (same sitting) | absent | `clear` |
+
+- **Finding 3's signal survives on 2.1.215 everywhere it is defined**:
+  model present at fresh interactive startup; absent in both headless
+  cells (finding 12). The `/clear` cell reproduces the .212 observation
+  exactly (no model, `source: "clear"`) — the ISS-0025 demote-only
+  classifier keeps yielding kind ABSENT for it, correctly, on .215.
+- **New end-reason value on record**: `/clear` emits
+  `SessionEnd reason: "clear"` on the session it terminates (and opens
+  a NEW session_id). Finding 4's register gains a third value
+  (`other`, `prompt_input_exit`, now `clear`); still an end-reason
+  signal only, no v1 consumer.
+- Clean `/exit` re-emitted `reason: "prompt_input_exit"` — finding 4
+  holds.
+
+**Tested range bumped 2.1.208–2.1.215** (spec stance +
+`TESTED_CLAUDE_CODE_RANGE` + the overview drift tripwire pins, amended
+together — the gotcha #7 remedy, third exercise). `.213`/`.214` were
+never observed on this machine; the range covers them in the semver
+sense only.

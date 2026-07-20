@@ -251,10 +251,12 @@ hope — see `docs/recording-pass.md`.
 
 **The version-support contract (what we promise users).** Capture works on
 any version. Facets are verified against a named, tested range (currently
-**2.1.208–2.1.212**, bumped 2026-07-17 by the PRD-0003 recording pass —
-findings 9–11 in docs/recording-pass.md; the kind facet's `/clear` gap is
-recorded there and its demote-only fix ruled the same day),
-published in the README. Outside that range, capture
+**2.1.208–2.1.215**, bumped 2026-07-20 by the 2.1.215 recording pass —
+findings 12–13 in docs/recording-pass.md, every register cell re-verified
+including the operator keyboard cell; .213/.214 were never observed on
+this machine and are covered by the range only in the semver sense; the
+kind facet's `/clear` gap and its demote-only fix remain as recorded
+2026-07-17), published in the README. Outside that range, capture
 still records everything and facets may degrade to ABSENT — and `doctor`
 names which ones and why. We never silently guess a facet to preserve the
 appearance of support.

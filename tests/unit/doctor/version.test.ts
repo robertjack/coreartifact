@@ -34,6 +34,6 @@ describe("parseClaudeVersionOutput", () => {
 describe("TESTED_CLAUDE_CODE_RANGE", () => {
   it("names the fixtures' actual span", () => {
     expect(TESTED_CLAUDE_CODE_RANGE.min).toBe("2.1.208");
-    expect(TESTED_CLAUDE_CODE_RANGE.max).toBe("2.1.212");
+    expect(TESTED_CLAUDE_CODE_RANGE.max).toBe("2.1.215");
   });
 });
