@@ -172,13 +172,21 @@ findings section and the decisions log.
   tripwire on the hook glob). Five-branch train verified conflict-free
   + 209/807 green before merging; dist rebuilt + smoked — next
   campaign runs all five.
-- Next: launch acts (spec list): README, LICENSE/NOTICE,
-  SECURITY.md, CI, ping receiver, write-up, the flip. Daily-lane:
-  sonnet-5 + <synthetic> price rows · S2s 132–145 · F1/F3 ·
-  torn-dist flake (fix: packaging test packs with lifecycle scripts
-  ignored, or from a repo snapshot — root cause above) · ISS-0027
-  default-port test vs a running dashboard (retro addendum) ·
-  findings 194/195 breadth notes. Geography in docs/map.md.
+- Launch acts 1–5 DONE (2026-07-20, commits 6a3e631..eee4e50):
+  torn-dist flake FIXED first (pack --config.ignore-scripts=true,
+  execution-proven, before CI could inherit it) · README (laws-first,
+  quickstart, cart alias, range 2.1.208–2.1.215) · LICENSE+NOTICE
+  (Apache-2.0; packaging allowlist gained NOTICE, proven vs real
+  tarball) · SECURITY.md (GitHub advisories; privacy law = security
+  surface) · CONTRIBUTING.md (personal-first, no PRs pre-1.0) · CI
+  (three gates, macos-15 — the only proven environment; actionlint
+  clean; runs on first push to GitHub). Full gates re-verified bound.
+- Next: launch acts remaining — ping receiver (Worker on
+  coreartifact.com, before the flip) · write-up (operator voice) ·
+  the flip (operator decision). Daily-lane: sonnet-5 + <synthetic>
+  price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
+  running dashboard (retro addendum) · findings 194/195 breadth
+  notes. Geography in docs/map.md.
 
 ## Repo conventions
 
