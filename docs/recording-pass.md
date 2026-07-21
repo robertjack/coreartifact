@@ -503,3 +503,29 @@ both transcripts self-identifying `2.1.215`):
 together — the gotcha #7 remedy, third exercise). `.213`/`.214` were
 never observed on this machine; the range covers them in the semver
 sense only.
+
+## FINDING 14 (2026-07-20, found by the pre-launch E2E audit): `source: "resume"` — a FOURTH SessionStart mode, and it falsified a fold assumption
+
+Observed live in this repo's own spool (session `ecb416c0`, the
+operator session running the launch work): resuming a session emits a
+SECOND `SessionStart` with `source: "resume"`, NO `model` key, and a
+fresh envelope `git.head`. Consequences, both handled:
+
+- **Kind**: the demote-only ladder already covers it — the classifier
+  reads the FIRST SessionStart, and a session whose capture *begins* at
+  a resume line (hook installed mid-life) demotes honestly to ABSENT
+  with reason naming "resume". No change needed.
+- **The rebuild law**: `foldSessionFacets` assumed "SessionStart occurs
+  at most once per genuine session" and let the LAST boundary line win,
+  while the incremental upsert's COALESCE lets the FIRST win — so a
+  full rebuild disagreed with the incrementally grown ledger on
+  `sha_before` (one row, one column; proven deterministic by the
+  audit's double rebuild). FIXED same day: the fold is now
+  first-non-null-wins per facet, mirroring COALESCE and the classifier;
+  regression tests pin the resumed-session shape. The frozen-spool
+  re-proof now reproduces the live value exactly.
+
+Register note: whether a resumed session's `ended_at` should advance
+past its first SessionEnd (both paths currently agree on first-wins) is
+an UNRULED semantics question for a future pass that records a full
+resume→end flow.

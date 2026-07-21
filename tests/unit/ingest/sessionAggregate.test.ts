@@ -82,3 +82,73 @@ describe("foldSessionFacets", () => {
     expect(() => foldSessionFacets([])).toThrow();
   });
 });
+
+// The resumed-session shape, observed live 2026-07-20 (this repo's own
+// spool, session ecb416c0): a SECOND SessionStart with source "resume", no
+// `model` key, and a fresh git.head — falsifying the fold's original
+// "SessionStart occurs at most once" assumption. Every facet must be
+// first-non-null-wins, mirroring the incremental upsert's COALESCE merge,
+// or a full rebuild diverges from the incrementally grown ledger (the
+// rebuild law violated — found by the 2026-07-20 pre-launch audit).
+describe("foldSessionFacets: resumed sessions (multiple boundary lines)", () => {
+  const resumedSession: FoldableEvent[] = [
+    {
+      ts: "2026-07-20T17:46:11.000Z",
+      hookEventName: "SessionStart",
+      eventObj: { model: "claude-fable-5", source: "startup" },
+      git: { head: "aaaa000000000000000000000000000000000001" },
+    },
+    { ts: "2026-07-20T18:00:00.000Z", hookEventName: "PostToolUse", eventObj: {} },
+    {
+      ts: "2026-07-20T19:00:00.000Z",
+      hookEventName: "SessionStart",
+      eventObj: { source: "resume" },
+      git: { head: "bbbb000000000000000000000000000000000002" },
+    },
+  ];
+
+  it("sha_before is the FIRST SessionStart's head — the resume line never overwrites it", () => {
+    expect(foldSessionFacets(resumedSession).shaBefore).toBe("aaaa000000000000000000000000000000000001");
+  });
+
+  it("kind contribution is the FIRST SessionStart's — the model-less resume line never demotes it", () => {
+    expect(foldSessionFacets(resumedSession).kind).toBe("interactive");
+  });
+
+  it("a facet the first boundary line lacks is still taken from a later one (COALESCE semantics, per-facet not per-event)", () => {
+    const headlessNoHeadThenResume: FoldableEvent[] = [
+      { ts: "2026-07-20T17:00:00.000Z", hookEventName: "SessionStart", eventObj: { source: "startup" } },
+      {
+        ts: "2026-07-20T18:00:00.000Z",
+        hookEventName: "SessionStart",
+        eventObj: { source: "resume" },
+        git: { head: "cccc000000000000000000000000000000000003" },
+      },
+    ];
+    const delta = foldSessionFacets(headlessNoHeadThenResume);
+    expect(delta.kind).toBe("headless");
+    expect(delta.shaBefore).toBe("cccc000000000000000000000000000000000003");
+  });
+
+  it("ended_at and sha_after are first-wins across multiple SessionEnds, matching the incremental merge exactly", () => {
+    const doubleEnd: FoldableEvent[] = [
+      ...resumedSession,
+      {
+        ts: "2026-07-20T18:30:00.000Z",
+        hookEventName: "SessionEnd",
+        eventObj: { reason: "clear" },
+        git: { head: "dddd000000000000000000000000000000000004" },
+      },
+      {
+        ts: "2026-07-20T20:00:00.000Z",
+        hookEventName: "SessionEnd",
+        eventObj: { reason: "other" },
+        git: { head: "eeee000000000000000000000000000000000005" },
+      },
+    ];
+    const delta = foldSessionFacets(doubleEnd);
+    expect(delta.endedAt).toBe("2026-07-20T18:30:00.000Z");
+    expect(delta.shaAfter).toBe("dddd000000000000000000000000000000000004");
+    expect(delta.maxTs).toBe("2026-07-20T20:00:00.000Z");
+  });
+});
