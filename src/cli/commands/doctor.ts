@@ -57,23 +57,45 @@ export async function doctorCommand(): Promise<number> {
   const paths = getPaths(repoRoot);
 
   const runningVersion = await getRunningClaudeVersion();
-  const worktreeGaps = findWorktreeGaps(repoRoot);
+
+  let worktreeGaps: { checkoutPath: string }[] = [];
+  let worktreeScanError: string | null = null;
+  try {
+    worktreeGaps = findWorktreeGaps(repoRoot);
+  } catch (err) {
+    // Out-of-spec input (doctor is repo-scoped): a non-git cwd or any other
+    // shell-out failure degrades to a named finding rather than a raw
+    // stack trace (F134/F136, degradation law).
+    worktreeScanError = err instanceof Error ? err.message : String(err);
+  }
 
   let absences: AbsenceRow[] = [];
   let sessionVersions: SessionVersionRow[] = [];
+  let ledgerReadError: string | null = null;
   const ledgerExists = existsSync(paths.ledger);
   if (ledgerExists) {
     // readOnly: true — doctor must never write to the ledger, even
     // incidentally (WAL/journal bootstrap), so it opens the same way
     // `show` does rather than reusing openLedger, which creates on demand.
-    const db = new DatabaseSync(paths.ledger, { readOnly: true });
     try {
-      absences = getAllAbsences(db);
-      sessionVersions = db
-        .prepare("SELECT session_id, cc_version FROM sessions WHERE cc_version IS NOT NULL")
-        .all() as SessionVersionRow[];
-    } finally {
-      db.close();
+      const db = new DatabaseSync(paths.ledger, { readOnly: true });
+      try {
+        // busy_timeout defaults to 0 on a fresh node:sqlite connection —
+        // without it, a concurrent writer's lock crashes doctor instead of
+        // making it wait (F135; mirrors openLedger in core/ledger.ts).
+        db.exec("PRAGMA busy_timeout = 5000");
+        absences = getAllAbsences(db);
+        sessionVersions = db
+          .prepare("SELECT session_id, cc_version FROM sessions WHERE cc_version IS NOT NULL")
+          .all() as SessionVersionRow[];
+      } finally {
+        db.close();
+      }
+    } catch (err) {
+      // A 0-byte file mid-creation, a truncated/corrupt ledger, a pre-v2
+      // ledger, or a lock held past the timeout — never a crash, always a
+      // named "we don't know" (F132, degradation law).
+      ledgerReadError = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -83,6 +105,8 @@ export async function doctorCommand(): Promise<number> {
     absences,
     sessionVersions,
     worktreeGaps,
+    ledgerReadError,
+    worktreeScanError,
   });
 
   process.stdout.write(`${report.lines.join("\n")}\n`);

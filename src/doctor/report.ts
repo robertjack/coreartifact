@@ -28,6 +28,16 @@ export interface DoctorReportInput {
   absences: DoctorAbsenceInput[];
   sessionVersions: DoctorSessionVersionInput[];
   worktreeGaps: DoctorWorktreeGapInput[];
+  // Set when the ledger exists but could not be read (mid-creation, a
+  // truncated/corrupt file, or a lock held by a concurrent writer — F132,
+  // F135). Read fails toward a named "we don't know", never a crash: when
+  // set, sections 3's absences/session-version lines are skipped (the data
+  // is unreadable, not zero) but sections 1, 2 and 4 still render.
+  ledgerReadError?: string | null;
+  // Set when the worktree-gap scan itself could not run (e.g. cwd is not a
+  // git repository — F134/F136). Read fails toward a named finding rather
+  // than propagating the raw error.
+  worktreeScanError?: string | null;
 }
 
 export interface DoctorReport {
@@ -58,6 +68,13 @@ export function buildDoctorReport(input: DoctorReportInput): DoctorReport {
     const finding = "No ledger found for this repo (doctor never creates one — run `coreartifact log` first)";
     lines.push(finding);
     findings.push(finding);
+  } else if (input.ledgerReadError != null) {
+    // The ledger exists but couldn't be read (mid-creation, corrupt, or
+    // locked by a concurrent writer) — a named "we don't know", never a
+    // crash (F132/F135, degradation law).
+    const finding = `Ledger unreadable: ${input.ledgerReadError}`;
+    lines.push(finding);
+    findings.push(finding);
   } else {
     for (const absence of input.absences) {
       const finding = `Session ${absence.session_id}: facet "${absence.facet}" is ${ABSENT_MARKER} — ${absence.reason}`;
@@ -72,10 +89,16 @@ export function buildDoctorReport(input: DoctorReportInput): DoctorReport {
   }
 
   // Section 4: worktree propagation gaps.
-  for (const gap of input.worktreeGaps) {
-    const finding = `Worktree missing settings file: ${gap.checkoutPath}`;
+  if (input.worktreeScanError != null) {
+    const finding = `Worktree scan unavailable: ${input.worktreeScanError}`;
     lines.push(finding);
     findings.push(finding);
+  } else {
+    for (const gap of input.worktreeGaps) {
+      const finding = `Worktree missing settings file: ${gap.checkoutPath}`;
+      lines.push(finding);
+      findings.push(finding);
+    }
   }
 
   return { lines, exitCode: findings.length > 0 ? 1 : 0 };

@@ -343,6 +343,45 @@ async function runIngestBody(
         newEventsBySession.set(line.sessionId, bucket);
       }
 
+      // Backfill (F143): background_task_id is promoted only at INSERT
+      // time, so rows written by a pre-ISS-0024 build (or by any build
+      // before extractBackgroundTaskId existed) stay NULL forever —
+      // `ON CONFLICT(line_no) DO NOTHING` skips re-insertion and the HWM
+      // cursor never re-reads those bytes, so those sessions' backgrounded
+      // outcomes are permanently stuck ABSENT after an upgrade even though
+      // the resolving TaskOutput poll is already sitting in the ledger.
+      // Re-derive it here from the payload already on disk, cheaply
+      // filtered to rows that could possibly resolve (a bare string match
+      // beats parsing every Bash PostToolUse); once a row is backfilled it
+      // drops out of this scan's own WHERE clause, so the cost converges
+      // to zero rather than rescanning the whole ledger every ingest.
+      const backfillCandidatesStmt = handle.db.prepare(
+        `SELECT line_no, hook_event_name, payload FROM events
+         WHERE background_task_id IS NULL
+           AND hook_event_name = 'PostToolUse'
+           AND (payload LIKE '%backgroundTaskId%' OR payload LIKE '%TaskOutput%')`,
+      );
+      const backfillUpdateStmt = handle.db.prepare(
+        `UPDATE events SET background_task_id = ? WHERE line_no = ?`,
+      );
+      for (const row of backfillCandidatesStmt.all() as {
+        line_no: number;
+        hook_event_name: string;
+        payload: string;
+      }[]) {
+        let eventObj: unknown;
+        try {
+          eventObj = JSON.parse(row.payload);
+        } catch {
+          continue;
+        }
+        if (typeof eventObj !== "object" || eventObj === null || Array.isArray(eventObj)) continue;
+        const taskId = extractBackgroundTaskId(row.hook_event_name, eventObj as Record<string, unknown>);
+        if (taskId !== null) {
+          backfillUpdateStmt.run(taskId, row.line_no);
+        }
+      }
+
       // Checks: the second `v: 1` spool variant (spec "Ingest routing").
       // Every field projects verbatim from the frozen spool line, including
       // `session_id`/`bound_by` -- ingest never re-resolves a binding

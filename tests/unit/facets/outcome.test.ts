@@ -163,10 +163,10 @@ describe("facets/outcome: deriveBackgroundedOutcome", () => {
     expect(deriveBackgroundedOutcome("task-abc", [matchedZero])).toEqual({ state: "success" });
   });
 
-  it("a matched TaskOutput with a nonzero exitCode resolves to failure", () => {
+  it("a matched TaskOutput with a nonzero exitCode resolves to failure, naming the exit code (F141: the joined outcome must not drop it)", () => {
     expect(deriveBackgroundedOutcome("task-abc", [matchedNonzero])).toEqual({
       state: "failure",
-      error: "",
+      error: "Exit code 1",
     });
   });
 

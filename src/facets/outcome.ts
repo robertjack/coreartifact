@@ -154,7 +154,7 @@ export function deriveBackgroundedOutcome(
     const task = toolResponse ? asObject(toolResponse.task) : null;
     const exitCode = task ? numberOrNull(task.exitCode) : null;
     if (exitCode === null) continue;
-    return exitCode === 0 ? { state: "success" } : { state: "failure", error: "" };
+    return exitCode === 0 ? { state: "success" } : { state: "failure", error: `Exit code ${exitCode}` };
   }
   return { state: "absent" };
 }
