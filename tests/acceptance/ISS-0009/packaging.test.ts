@@ -41,6 +41,8 @@ const ALLOWED_TOP_LEVEL_METADATA_FILES = new Set([
   "LICENSE",
   "LICENSE.md",
   "LICENSE.txt",
+  "NOTICE",
+  "NOTICE.md",
 ]);
 
 // Dev-only paths the packet explicitly names as excluded. Checked as a
