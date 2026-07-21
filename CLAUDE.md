@@ -190,8 +190,15 @@ findings section and the decisions log.
   briefly committed — caught and amended OUT before any push;
   .wrangler/ now gitignored (public-history law: check every commit's
   file list, not just the diff).
-- Next: launch acts remaining — write-up (operator voice) · the flip
-  (operator decision). Daily-lane: sonnet-5 + <synthetic>
+- Launch act 7 DRAFTED (2026-07-20, e0f6e5b):
+  docs/launch-writeup.md — walks the public history ("your agent says
+  the tests passed — prove it"); every number verified (three campaigns
+  $378.06, 33 issues, test-side-only escalations, the honest 0-of-35
+  headline, 4 recording passes / 5 versions). Awaiting operator voice
+  pass.
+- Next: the flip (operator decision — repo public, private:true
+  removed, publish over the placeholder + fix its MIT stamp), after
+  the write-up edit. Daily-lane: sonnet-5 + <synthetic>
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
   notes. Geography in docs/map.md.
