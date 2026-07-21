@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SessionViewResponse } from "../api-types";
+import type { ApiErrorResponse, SessionViewResponse } from "../api-types";
 import {
   checkBadge,
   facetHeader,
@@ -114,7 +114,13 @@ export default function Session({ sessionId }: { sessionId: string }) {
     const qs = repo ? `?repo=${encodeURIComponent(repo)}` : "";
     fetch(`/api/session/${encodeURIComponent(sessionId)}${qs}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error(`session request failed: ${res.status}`);
+        if (!res.ok) {
+          // api.md "Error body — one shape, everywhere": surface the
+          // structured message rather than a generic status-code string
+          // (F3, PRD-0003 integration review).
+          const body = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+          throw new Error(body?.error?.message ?? `session request failed: ${res.status}`);
+        }
         const data = (await res.json()) as SessionViewResponse;
         if (!cancelled) setState({ status: "loaded", data });
       })

@@ -104,7 +104,7 @@ export interface SessionCheck {
   exit_code: number;
   passed: boolean;
   truncated: boolean;
-  bound_by: string;
+  bound_by: string | null;
 }
 
 export interface SessionTestResult {

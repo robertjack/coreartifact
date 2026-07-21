@@ -1,9 +1,9 @@
 // The dashboard's /api/* route registry (docs/issues/ISS-0027.md) — the
 // shared surface ISS-0028 (the overview handler) and ISS-0029 (the
-// session-view handler) each amend, replacing one stub entry's handler in
-// place, mirroring src/cli/index.ts's COMMANDS table. Ships here with valid
-// empty-shaped stub handlers so the server is green and the GET wall is
-// testable before either endpoint lands.
+// session-view handler) each landed against, mirroring src/cli/index.ts's
+// COMMANDS table. Routes to the real overview and session-view handlers;
+// the GET wall (method/path matching) lives here, independent of what each
+// handler does.
 
 import { overviewHandler } from "./overview.js";
 import { sessionHandler } from "./session.js";

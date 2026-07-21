@@ -17,6 +17,7 @@ import { getPaths } from "./core/paths.js";
 import { readRegistry } from "./core/registry.js";
 import { ingest, type IngestReport } from "./ingest/index.js";
 import { renderRepoUnavailable } from "./render/log.js";
+import { BUSY_TIMEOUT_MS } from "./core/ledger.js";
 
 // @ts-ignore -- node:sqlite has no ambient types available in this sandbox
 import { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
@@ -39,9 +40,10 @@ const DatabaseSync = DatabaseSyncCtor as unknown as new (
 
 // api.md Flag 1 / R5: every read connection the API opens must set
 // busy_timeout so a concurrent writer never surfaces "database is locked" —
-// reused from src/core/ledger.ts's own BUSY_TIMEOUT_MS value (5000), not
-// re-declared as a separate number that could drift from it.
-export const READ_BUSY_TIMEOUT_MS = 5000;
+// reused from src/core/ledger.ts's own BUSY_TIMEOUT_MS value, imported (not
+// re-declared as a separate number that could drift from it — F1, PRD-0003
+// integration review: the literal used to be duplicated three ways).
+export const READ_BUSY_TIMEOUT_MS = BUSY_TIMEOUT_MS;
 
 // Hand-rolled join: same rationale as src/core/paths.ts and
 // src/cli/commands/log.ts — this file owns no shared path-join module.

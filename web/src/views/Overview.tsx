@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { OverviewResponse } from "../api-types";
+import type { ApiErrorResponse, OverviewResponse } from "../api-types";
 import {
   barSegments,
   driftBanner,
@@ -42,7 +42,13 @@ export default function Overview() {
     let cancelled = false;
     fetch("/api/overview")
       .then(async (res) => {
-        if (!res.ok) throw new Error(`overview request failed: ${res.status}`);
+        if (!res.ok) {
+          // api.md "Error body — one shape, everywhere": surface the
+          // structured message rather than a generic status-code string
+          // (F3, PRD-0003 integration review).
+          const body = (await res.json().catch(() => null)) as ApiErrorResponse | null;
+          throw new Error(body?.error?.message ?? `overview request failed: ${res.status}`);
+        }
         const data = (await res.json()) as OverviewResponse;
         if (!cancelled) setState({ status: "loaded", data });
       })

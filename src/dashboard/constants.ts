@@ -4,11 +4,17 @@
 // LATEST_SESSIONS_LIMIT/OVERVIEW_WINDOW_DAYS/READ_BUSY_TIMEOUT_MS from here;
 // this issue is the only one that reads DASHBOARD_DEFAULT_PORT and the
 // loopback allowlist.
+//
+// READ_BUSY_TIMEOUT_MS is re-exported from src/resolve-session.ts, which in
+// turn imports it from src/core/ledger.ts's BUSY_TIMEOUT_MS — one literal,
+// consumed by all three PRAGMA busy_timeout call sites (F1, PRD-0003
+// integration review: the value used to be duplicated three ways).
+import { READ_BUSY_TIMEOUT_MS } from "../resolve-session.js";
 
+export { READ_BUSY_TIMEOUT_MS };
 export const DASHBOARD_DEFAULT_PORT = 2278;
 export const LATEST_SESSIONS_LIMIT = 50;
 export const OVERVIEW_WINDOW_DAYS = 7;
-export const READ_BUSY_TIMEOUT_MS = 5000;
 
 // The Host-header allowlist (api.md Surface A, "the loopback wall") — a
 // second, independent layer against a DNS rebind to a name that resolves to

@@ -43,7 +43,7 @@ const statSync = statSyncFn as (path: string) => { isDirectory(): boolean };
 // for a concurrent writer -- and an unclassified probe failure used to mean
 // "rebuild" (see needsRebuildError below), which deleted a perfectly valid
 // ledger out from under a live writer. Same timeout, same wait, on both.
-const BUSY_TIMEOUT_MS = 5000;
+export const BUSY_TIMEOUT_MS = 5000;
 
 // Thrown when openLedger's dbPath exists but is a directory. rmSync's raw
 // EISDIR is an unhelpful, unnamed failure at the delete-then-recreate step;

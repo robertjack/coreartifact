@@ -28,10 +28,14 @@ function NotYetWired({ label }: { label: string }) {
   );
 }
 
-function matchRoute(pathname: string): { route: "overview" | "session" | "unknown"; sessionId?: string } {
+export function matchRoute(pathname: string): { route: "overview" | "session" | "unknown"; sessionId?: string } {
   if (pathname === "/") return { route: "overview" };
   const sessionMatch = pathname.match(/^\/session\/([^/]+)$/);
-  if (sessionMatch) return { route: "session", sessionId: sessionMatch[1] };
+  // The path segment is percent-encoded (overview/model.ts's sessionRow
+  // built the href with encodeURIComponent) — decode here, once, so
+  // downstream consumers (Session.tsx's own fetch, which re-encodes for the
+  // API call) work with the raw session id, not a doubly-encoded one.
+  if (sessionMatch) return { route: "session", sessionId: decodeURIComponent(sessionMatch[1]) };
   return { route: "unknown" };
 }
 
