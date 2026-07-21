@@ -1,0 +1,16 @@
+// The ping receiver (spec-v1.md "Launch acts"): the pinned endpoint the
+// opt-in weekly ping POSTs to — src/ping/constants.ts PING_ENDPOINT =
+// https://coreartifact.com/ping. Deployed as a custom-domain Worker on the
+// apex; every non-/ping path 404s from the Worker itself, so nothing else
+// needs to exist on the domain before launch.
+{
+  "name": "coreartifact-ping",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-20",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "routes": [{ "pattern": "coreartifact.com", "custom_domain": true }],
+  "analytics_engine_datasets": [{ "binding": "PINGS", "dataset": "coreartifact_pings" }]
+}

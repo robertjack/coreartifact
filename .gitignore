@@ -15,3 +15,5 @@ submodule-source/
 
 # Premium UI template — licensed reference material, must NEVER enter the public history (shadcnblocks license: no redistribution as stock).
 templates/
+infra/ping-receiver/worker-configuration.d.ts
+infra/ping-receiver/.wrangler/
