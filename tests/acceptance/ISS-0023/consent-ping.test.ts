@@ -23,7 +23,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createTmpRepo, type TmpRepo } from "../harness/index.js";
+import { createTmpRepo, stripNodeDiagnostics, type TmpRepo } from "../harness/index.js";
 import { appendInstall, appendConsent, readState } from "../../../src/core/operatorState.js";
 import {
   spawnCli,
@@ -267,7 +267,10 @@ describe("ISS-0023 consent + the weekly ping", () => {
       // working transport under otherwise-identical conditions.
       expect(bad.exitCode).toBe(good.exitCode);
       expect(bad.stdout).toBe(good.stdout);
-      expect(bad.stderr).toBe(good.stderr);
+      // stderr compared modulo Node's own pid-bearing runtime diagnostics
+      // (node:sqlite ExperimentalWarning on the 22.x engines floor) — the
+      // contract is about PRODUCT stderr, and the pid differs per process.
+      expect(stripNodeDiagnostics(bad.stderr)).toBe(stripNodeDiagnostics(good.stderr));
 
       // Attempt-time recording: the weekly gate closes whether or not
       // delivery succeeds — last_ping_at must be set even though the

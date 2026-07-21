@@ -28,6 +28,7 @@ import {
   replayFixtures,
   addWorktree,
   readLedger,
+  stripNodeDiagnostics,
   type TmpRepo,
 } from "../harness/index.js";
 import { loadFixtureStream } from "../../fixtures/loader.js";
@@ -227,7 +228,7 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
         registryPath: repo3.registryPath,
       });
       expect(gapLogResult.exitCode, `log did not exit 0; stderr: ${gapLogResult.stderr}`).toBe(0);
-      const gapOutput = `${gapLogResult.stdout}\n${gapLogResult.stderr}`;
+      const gapOutput = stripNodeDiagnostics(`${gapLogResult.stdout}\n${gapLogResult.stderr}`);
       expect(gapOutput, "log did not warn about a worktree missing the settings file").toMatch(/warn/i);
       expect(
         gapOutput,
@@ -249,7 +250,7 @@ describe("ISS-0007 log: one line per session, unioned across repos, honest about
         registryPath: repo4.registryPath,
       });
       expect(silentLogResult.exitCode, `log did not exit 0; stderr: ${silentLogResult.stderr}`).toBe(0);
-      const silentOutput = `${silentLogResult.stdout}\n${silentLogResult.stderr}`;
+      const silentOutput = stripNodeDiagnostics(`${silentLogResult.stdout}\n${silentLogResult.stderr}`);
       expect(
         silentOutput,
         `log warned about a worktree even though propagation was complete before init ran (checkout: ${propagatedWorktree.checkoutPath})`,

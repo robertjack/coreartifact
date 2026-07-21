@@ -229,7 +229,7 @@ describe("openLedger", () => {
 
   it(
     "S1: a concurrent writer's real cross-process lock on a VALID v2 ledger must never cause a delete -- openLedger throws instead of returning a wiped ledger",
-    { timeout: 15000 },
+    { timeout: 30000 },
     async () => {
       const dbPath = path.join(tmpDir, "ledger.db");
       const signalPath = path.join(tmpDir, "lock.signal");
@@ -242,8 +242,12 @@ describe("openLedger", () => {
       const statBefore = fs.statSync(dbPath);
 
       // holdMs deliberately exceeds openLedger's busy_timeout (5000ms) so the
-      // probe is guaranteed to still be contending, not merely unlucky.
-      const holder = spawnLockHolder(dbPath, signalPath, 6000);
+      // probe is guaranteed to still be contending, not merely unlucky. The
+      // margin is 7s, not the original 1s: on a saturated CI runner (first
+      // seen macos-15, CI run #1, 2026-07-21) signal-detection and scheduling
+      // latency ate the 1s margin — the child released inside the parent's
+      // busy_timeout window and openLedger wrongly succeeded.
+      const holder = spawnLockHolder(dbPath, signalPath, 12000);
       await holder.locked;
 
       let thrown: unknown;

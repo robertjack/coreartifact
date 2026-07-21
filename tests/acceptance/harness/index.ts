@@ -50,3 +50,17 @@ export function getSession(repoRoot: string, sessionId: string): HarnessSessionR
   if (!row) return undefined;
   return { ...row, model: row.model === null ? "ABSENT" : row.model };
 }
+
+// Strips Node's own runtime diagnostic lines from captured CLI output before
+// asserting on it — on the engines floor (22.x) `node:sqlite` emits
+// "(node:<pid>) ExperimentalWarning: ..." plus a trace-warnings hint to
+// stderr, which is runtime framing, not product output. Found by CI run #1
+// (2026-07-21, macos-15 @ node 22.13 — the first execution ever at the
+// floor): the pid varies per process (breaking byte-equality comparisons)
+// and "Warning" matches /warn/i (breaking negative warning assertions).
+export function stripNodeDiagnostics(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/^\(node:\d+\) /.test(line) && !line.startsWith("(Use `node --trace-warnings"))
+    .join("\n");
+}
