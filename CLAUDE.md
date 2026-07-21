@@ -276,7 +276,11 @@ findings section and the decisions log.
   Daily-lane: sonnet-5 + <synthetic>
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
-  notes. Geography in docs/map.md.
+  notes · dashboard bound_by chip (2026-07-21 single-open follow-on:
+  session api + web types already carry it, the web session view — the
+  VERIFIED headline surface — never renders it) · standalone-check
+  notice (zero/several open records silently, same quiet-attribution
+  class). Geography in docs/map.md.
 - By-hand (operator-directed, 2026-07-21): single-open binding made
   visible. Dogfood finding in the coretest sandbox: a human-run `check`
   in a second terminal auto-bound to the open agent session,
