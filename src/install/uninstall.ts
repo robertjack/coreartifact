@@ -31,7 +31,7 @@
 import { existsSync as existsSyncFn, mkdirSync as mkdirSyncFn, readdirSync as readdirSyncFn, readFileSync as readFileSyncFn, rmdirSync as rmdirSyncFn, rmSync as rmSyncFn, unlinkSync as unlinkSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
 // @ts-ignore -- node:readline/promises has no ambient types available in this sandbox
 import { createInterface as createInterfaceFn } from "node:readline/promises";
-import { getPaths, type Paths } from "../core/paths.js";
+import { getPaths, joinPath, type Paths } from "../core/paths.js";
 import { removeLedger } from "../core/registry.js";
 import { listOtherWorktreePaths } from "./gitRepo.js";
 import { readInstallBackup, claudeDirBackupKey, type InstallBackup, type BackupEntry } from "./installBackup.js";
@@ -57,13 +57,6 @@ interface ReadlineInterface {
   close(): void;
 }
 const createInterface = createInterfaceFn as (opts: { input: unknown; output: unknown }) => ReadlineInterface;
-
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 // Hand-rolled dirname (same rationale as core/registry.ts's dirnameOf): this
 // module owns no shared path-join module and node:path's ambient types are

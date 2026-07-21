@@ -31,7 +31,7 @@
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { mkdirSync as mkdirSyncFn, appendFileSync as appendFileSyncFn } from "node:fs";
-import { getPaths } from "../../core/paths.js";
+import { getPaths, joinPath } from "../../core/paths.js";
 import { resolveAttribution } from "../../core/attribution.js";
 import { serializeCheckLine } from "../../core/envelope.js";
 import { ingestAndResolveSessions } from "../../ingest/index.js";
@@ -48,12 +48,6 @@ declare const process: {
   stderr: { write(chunk: string): boolean };
 };
 
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 export async function checkCommand(args: string[]): Promise<number> {
   const parsed = parseCheckArgv(args);

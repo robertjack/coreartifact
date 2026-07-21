@@ -146,6 +146,10 @@ function tryRealpath(path: string): string | null {
   }
 }
 
+// Not consolidated into src/core/paths.ts's exported `joinPath` (daily-lane
+// finding 152): this file's header law is "imports nothing but node:
+// builtins — no src/core, no sibling file in this directory," so this copy
+// stays private by design.
 function joinPath(base: string, maybeRelative: string): string {
   if (maybeRelative.startsWith("/")) return maybeRelative;
   return `${base.replace(/\/+$/, "")}/${maybeRelative}`;

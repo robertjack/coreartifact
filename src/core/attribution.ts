@@ -70,6 +70,15 @@ export function scrubbedEnv(env: Record<string, string | undefined>): Record<str
   return out;
 }
 
+// Not consolidated into src/core/paths.ts's exported `joinPath` (daily-lane
+// finding 152): that helper is variadic and always concatenates every part,
+// whereas this one takes exactly two arguments and treats an absolute
+// `maybeRelative` as an override that discards `base` entirely — different
+// semantics for an absolute second argument, e.g. join("/foo", "/bar") would
+// be "/foo/bar" there but is "/bar" here. capture.ts's hook artifact re-states
+// the identical two-argument semantics (and cannot import this module at
+// all, per its own header law), so the two stay in lockstep as intentional
+// duplicates rather than being unified with the unrelated variadic helper.
 function joinPath(base: string, maybeRelative: string): string {
   if (maybeRelative.startsWith("/")) return maybeRelative;
   return `${base.replace(/\/+$/, "")}/${maybeRelative}`;

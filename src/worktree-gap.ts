@@ -13,17 +13,9 @@
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { existsSync as existsSyncFn } from "node:fs";
 import { listOtherWorktreePaths } from "./install/gitRepo.js";
+import { joinPath } from "./core/paths.js";
 
 const existsSync = existsSyncFn as (path: string) => boolean;
-
-// Hand-rolled join: same rationale as core/ledger.ts and core/registry.ts —
-// this module owns no shared path-join module.
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 export interface WorktreeGap {
   checkoutPath: string;

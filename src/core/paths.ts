@@ -38,7 +38,15 @@ export interface Paths {
   state: string;
 }
 
-function join(...parts: string[]): string {
+// Exported as `joinPath` (daily-lane finding 152): the same variadic,
+// slash-deduping join every private `function joinPath` copy under src/
+// hand-rolled independently. Two files keep their own local copies rather
+// than importing this one: src/hook/capture.ts (the zero-dependency hook
+// artifact, forbidden from importing any sibling module) and
+// src/core/attribution.ts (a different two-argument signature with
+// absolute-path passthrough semantics that this variadic `join` does not
+// replicate — unifying them would be a behavior change).
+export function joinPath(...parts: string[]): string {
   return parts
     .filter((part) => part.length > 0)
     .join("/")
@@ -50,21 +58,21 @@ function homedir(): string {
 }
 
 export function getPaths(repoRoot: string = process.cwd()): Paths {
-  const dataDir = join(repoRoot, ".coreartifact");
+  const dataDir = joinPath(repoRoot, ".coreartifact");
   const override = process.env[REGISTRY_ROOT_ENV_VAR];
   // The registry root is a directory (`~/.coreartifact`), not the log
   // itself — schema.md Surface 3 / CONTEXT.md name the log explicitly as
   // `~/.coreartifact/registry.jsonl`. The env override still controls the
   // root, so a test subprocess pointed at a tmpdir gets both a distinct
   // root and a distinct log path.
-  const registryRoot = override && override.length > 0 ? override : join(homedir(), ".coreartifact");
+  const registryRoot = override && override.length > 0 ? override : joinPath(homedir(), ".coreartifact");
 
   return {
-    spool: join(dataDir, "spool.jsonl"),
-    ledger: join(dataDir, "ledger.db"),
-    hookArtifact: join(dataDir, "hooks", "capture.mjs"),
+    spool: joinPath(dataDir, "spool.jsonl"),
+    ledger: joinPath(dataDir, "ledger.db"),
+    hookArtifact: joinPath(dataDir, "hooks", "capture.mjs"),
     registryRoot,
-    registry: join(registryRoot, "registry.jsonl"),
-    state: join(registryRoot, "state.jsonl"),
+    registry: joinPath(registryRoot, "registry.jsonl"),
+    state: joinPath(registryRoot, "state.jsonl"),
   };
 }

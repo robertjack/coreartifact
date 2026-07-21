@@ -15,7 +15,7 @@
 import { mkdirSync as mkdirSyncFn, writeFileSync as writeFileSyncFn, readFileSync as readFileSyncFn, existsSync as existsSyncFn, copyFileSync as copyFileSyncFn } from "node:fs";
 // @ts-ignore -- node:crypto has no ambient types available in this sandbox
 import { randomUUID as randomUUIDFn } from "node:crypto";
-import { getPaths } from "../../core/paths.js";
+import { getPaths, joinPath } from "../../core/paths.js";
 import { addLedger } from "../../core/registry.js";
 import { readState, appendInstall, appendConsent } from "../../core/operatorState.js";
 import { resolveRepoRoot, listOtherWorktreePaths, isTrackedByGit } from "../../install/gitRepo.js";
@@ -54,12 +54,6 @@ const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => strin
 const existsSync = existsSyncFn as (path: string) => boolean;
 const copyFileSync = copyFileSyncFn as (src: string, dest: string) => void;
 
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 // A pre-existing settings file that fails to parse as a JSON object is
 // treated as absent (an empty base to merge onto) rather than aborting

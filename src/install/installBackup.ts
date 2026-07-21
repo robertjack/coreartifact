@@ -23,6 +23,7 @@
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { existsSync as existsSyncFn, mkdirSync as mkdirSyncFn, readFileSync as readFileSyncFn, writeFileSync as writeFileSyncFn } from "node:fs";
 import { listOtherWorktreePaths } from "./gitRepo.js";
+import { joinPath } from "../core/paths.js";
 // referencesHookArtifact/removeHookConfig: F108 fix below needs both to
 // recognize and strip a settings file that ALREADY carries coreartifact's
 // own hook entries before recording it as a "pre-init" baseline (see
@@ -37,12 +38,6 @@ const mkdirSync = mkdirSyncFn as (path: string, options?: { recursive?: boolean 
 const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => string;
 const writeFileSync = writeFileSyncFn as (path: string, data: string) => void;
 
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 export interface BackupEntry {
   existed: boolean;

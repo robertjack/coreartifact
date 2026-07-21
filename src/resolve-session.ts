@@ -13,7 +13,7 @@
 
 // @ts-ignore -- node:fs has no ambient types available in this sandbox
 import { existsSync as existsSyncFn } from "node:fs";
-import { getPaths } from "./core/paths.js";
+import { getPaths, joinPath } from "./core/paths.js";
 import { readRegistry } from "./core/registry.js";
 import { ingest, type IngestReport } from "./ingest/index.js";
 import { renderRepoUnavailable } from "./render/log.js";
@@ -45,14 +45,6 @@ const DatabaseSync = DatabaseSyncCtor as unknown as new (
 // integration review: the literal used to be duplicated three ways).
 export const READ_BUSY_TIMEOUT_MS = BUSY_TIMEOUT_MS;
 
-// Hand-rolled join: same rationale as src/core/paths.ts and
-// src/cli/commands/log.ts — this file owns no shared path-join module.
-function joinPath(...parts: string[]): string {
-  return parts
-    .filter((part) => part.length > 0)
-    .join("/")
-    .replace(/\/{2,}/g, "/");
-}
 
 // Same reachability check log.ts uses (S3 fix, 2026-07-14 review finding):
 // a registered-but-deleted repo must never be ingested, which would recreate

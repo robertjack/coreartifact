@@ -22,6 +22,17 @@ const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => strin
 
 export type OperatorStateOp = "install" | "consent" | "ping";
 
+// Compile-time proof that OperatorStateEntry's discriminated `op` union
+// never drifts from the OperatorStateOp contract above (daily-lane finding
+// 153): if a new entry variant's `op` literal is ever added below without a
+// matching addition to OperatorStateOp, `Exclude<..., OperatorStateOp>`
+// stops being `never` and this assignment fails to typecheck.
+type AssertEntryOpsCoveredByOperatorStateOp = Exclude<OperatorStateEntry["op"], OperatorStateOp> extends never
+  ? true
+  : never;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _entryOpsCoveredByOperatorStateOp: AssertEntryOpsCoveredByOperatorStateOp = true;
+
 export interface InstallEntry {
   v: 1;
   op: "install";
