@@ -23,7 +23,11 @@ export const TESTED_CLAUDE_CODE_RANGE = {
   max: "2.1.215",
 } as const;
 
-const SEMVER_TOKEN_RE = /^\d+\.\d+\.\d+$/;
+// Accepts an optional -prerelease/+build suffix (finding 138): a future
+// "2.2.0-beta.1 (Claude Code)" should parse as a version — degrading the
+// ENTIRE version facet to ABSENT over ordinary semver framing would be
+// less honest, not more. Range comparison still reads the numeric triple.
+const SEMVER_TOKEN_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 // Pure parsing — the only logic in this file worth unit-testing directly.
 // A "single output line" means exactly one non-empty line once a trailing

@@ -37,3 +37,17 @@ describe("TESTED_CLAUDE_CODE_RANGE", () => {
     expect(TESTED_CLAUDE_CODE_RANGE.max).toBe("2.1.215");
   });
 });
+
+// Finding 138 (operator amendment 2026-07-20): a -prerelease/+build suffix
+// is ordinary semver framing, not corruption — it must parse, not degrade
+// the whole version facet to ABSENT.
+describe("parseClaudeVersionOutput: suffixed semver (finding 138)", () => {
+  it("accepts -prerelease and +build suffixes", () => {
+    expect(parseClaudeVersionOutput("2.2.0-beta.1 (Claude Code)\n")).toBe("2.2.0-beta.1");
+    expect(parseClaudeVersionOutput("2.1.216+build.7 (Claude Code)\n")).toBe("2.1.216+build.7");
+  });
+  it("still rejects genuinely malformed tokens", () => {
+    expect(parseClaudeVersionOutput("v2.1.216 (Claude Code)\n")).toBeNull();
+    expect(parseClaudeVersionOutput("2.1 (Claude Code)\n")).toBeNull();
+  });
+});

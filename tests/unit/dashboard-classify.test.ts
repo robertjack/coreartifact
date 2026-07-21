@@ -111,3 +111,11 @@ describe("classify.ts: isVersionInRange (numeric, dotted-segment comparison)", (
     expect(isVersionInRange("2", { min: "1.0.0", max: "3.0.0" })).toBe(true);
   });
 });
+
+// Finding 138 companion: suffixed versions compare by their numeric triple.
+describe("isVersionInRange: suffixed semver", () => {
+  test("a -prerelease of an in-range triple is in range; of an above-max triple is not", () => {
+    expect(isVersionInRange("2.1.215-beta", TESTED_CLAUDE_CODE_RANGE)).toBe(true);
+    expect(isVersionInRange("2.1.220-rc.1", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
+  });
+});

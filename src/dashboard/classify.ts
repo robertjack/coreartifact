@@ -48,10 +48,13 @@ export interface VersionRange {
 }
 
 // Numeric, dotted-segment comparison — never lexicographic ("2.1.9" vs
-// "2.1.10" is the canonical trap a string compare gets wrong).
+// "2.1.10" is the canonical trap a string compare gets wrong). A
+// -prerelease/+build suffix (parseable since finding 138's amendment) is
+// stripped before comparing: the range is defined over numeric triples,
+// and "2.1.216-beta" belongs to 2.1.216's slot for drift purposes.
 function compareVersions(a: string, b: string): number {
-  const partsA = a.split(".").map(Number);
-  const partsB = b.split(".").map(Number);
+  const partsA = a.split(/[-+]/, 1)[0]!.split(".").map(Number);
+  const partsB = b.split(/[-+]/, 1)[0]!.split(".").map(Number);
   const len = Math.max(partsA.length, partsB.length);
   for (let i = 0; i < len; i++) {
     const na = partsA[i] ?? 0;

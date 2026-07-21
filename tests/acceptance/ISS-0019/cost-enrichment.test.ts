@@ -439,9 +439,14 @@ describe("ISS-0019 cost enrichment: the one transcript-derived facet, fail-soft"
       if (!pair.oracle) throw new Error("test setup invariant: cost-headless must carry an envelope oracle");
       const oracle = pair.oracle;
 
-      // claude-sonnet-5 is named in this issue's own spec as deliberately
-      // unpinned this campaign (an intro-pricing window) — not a guessed id.
-      const unpinnedModel = "claude-sonnet-5";
+      // Operator amendment 2026-07-20 (daily-lane price-table pin):
+      // claude-sonnet-5 — this criterion's original example, named by the
+      // spec as "deliberately unpinned THIS CAMPAIGN" — is now pinned (the
+      // observed standard tier, envelope-proven across 7 worker attempts).
+      // The example becomes a RESERVED fake id so the criterion ("a model
+      // absent from the table stays cost-ABSENT") can never again be
+      // invalidated by a legitimate future pin. The assertion is unchanged.
+      const unpinnedModel = "claude-never-pinned-test-0";
       const sessionId = "iss19-unpinned-model-session";
 
       const workDir = makeScratchDir("coreartifact-iss19-unpinned-");
