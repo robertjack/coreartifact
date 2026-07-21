@@ -529,3 +529,37 @@ Register note: whether a resumed session's `ended_at` should advance
 past its first SessionEnd (both paths currently agree on first-wins) is
 an UNRULED semantics question for a future pass that records a full
 resume→end flow.
+
+---
+
+# Recording pass 2.1.216 — findings (2026-07-20, same day as .215)
+
+Recorded on **Claude Code 2.1.216** hours after the .215 pass (the
+auto-updater moved again during launch-week work; the E2E audit's
+scenario dashboards raised the banner within minutes of the version
+existing on this machine). Same protocol, same recorder. Streams and
+oracles at `tests/fixtures/recpass-2.1.216/`.
+
+## FINDING 15: the register holds on 2.1.216 — every scripted cell clean
+
+- Kind cells: both headless streams — no `model`, `source: "startup"`.
+- Transcript/cost: `requestId` dedup EXACT vs envelope (8 in / 576 out /
+  101,659 cache-read / 16,144 cache-creation); transcript
+  self-identifies `2.1.216`; still no cost key.
+- Vitest both paths, command-outcome fields, `claude --version`
+  first-token parse (`2.1.216 (Claude Code)`), Bash `tool_response`
+  key set: all unchanged.
+- TaskOutput fires on explicit poll with the full join shape; the
+  in-flight `running` poll again precedes the completed one
+  (finding 13 reproduced).
+
+## Outstanding
+
+- Interactive fresh-keyboard cell on .216: UNRECORDED — the bump
+  (spec + `TESTED_CLAUDE_CODE_RANGE` + tripwires, five sites as of the
+  .215 exercise) waits on it, per precedent.
+- Cadence note for the maintenance loop: two point releases in one
+  day. The scripted cells are ~$1.40 and fully mechanical now; the
+  keyboard cell is the only human minute. If the cadence holds
+  post-launch, `coreartifact record` (the spec's v1.1 roadmap item)
+  earns its slot.
