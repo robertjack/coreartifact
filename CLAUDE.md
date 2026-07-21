@@ -223,6 +223,29 @@ findings section and the decisions log.
   node 22.x prints the sqlite ExperimentalWarning to stderr (cosmetic,
   daily-lane/README candidate). Claude Code now 2.1.216 — drift banner
   up again on any ledger with .216 sessions; pass pending.
+- DAILY LANE CLEARED (2026-07-20/21, six parallel agent branches +
+  operator amendments, suite 89/602 → 92/620): price table gains
+  claude-sonnet-5 (STANDARD tier, envelope-proven zero-residual across
+  7 worker pairs — intro tier mathematically excluded; dated comment
+  carries the 2026-08-31 boundary) · <synthetic> rows ruled zero-usage
+  and excluded from the all-or-nothing pin (live transcripts proved a
+  rate-limit notice poisoning session 7cdc9d81's real cost) · spawn
+  failures now record check evidence (exit 127) · portable signal
+  table via os.constants · ISS-0027 default-port test skips-with-
+  reason when 2278 is held (dogfood collision retired) · dashboard
+  cluster (bound_by type, routes comment, href round-trip decode,
+  busy_timeout single constant, UI surfaces api.md error bodies) ·
+  S2s: 132/134/135/136/139/141/143 resolved, 133/137/140/144/145
+  deferred (locked-test strengthening, post-launch), 142 accepted ·
+  finding 138 suffixed-semver parse+compare · ISS-0019 unpinned
+  example → reserved fake id (operator amendment) · joinPath 6-of-8
+  unified (capture + attribution law-exempted) · OperatorStateOp
+  contract assertion · actions v5. FINDINGS TABLE: zero open. RULED:
+  cart no-args exit 0 stays (three ISS-0001 locked tests pin it
+  deliberately — not worth pre-launch amendments). Recording pass
+  2.1.216 scripted cells DONE same day (finding 15, register holds;
+  fixtures at tests/fixtures/recpass-2.1.216/) — keyboard cell +
+  range bump pending.
 - Next: the flip (operator decision — repo public, private:true
   removed, publish over the placeholder + fix its MIT stamp), after
   the write-up edit. Daily-lane: sonnet-5 + <synthetic>
