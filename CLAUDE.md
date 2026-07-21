@@ -161,9 +161,18 @@ findings section and the decisions log.
   as designed, gotcha #7's third exercise), reds + green all bound ·
   drift banner retired honestly. .213/.214 never observed (semver
   coverage only).
-- Next, in order: (1) convert the six filed aeh ideas to PRs
-  (27299f5+addendum, fc518f8, bbe2f40, 3ff175a, 31187c2 — PRD-0002
-  precedent) · (2) launch acts (spec list): README, LICENSE/NOTICE,
+- ALL SIX aeh ideas MERGED as five PRs (2026-07-20, aeh main a39dc67 →
+  4e7d3fe; #5 #6 #7 #8 #9): vitest --outputFile · agent-memory
+  auto-commit (review caught a pre-staged-sweep S2, pathspec fix) ·
+  cart-check gate wrapping (workers now land BOUND evidence — the
+  dashboard headline becomes real next campaign) · stage-aware resume
+  + truthful infra_failure (marker: tests/acceptance/<ISS>/
+  .aeh-mappings.json committed at acceptance) · dispatch-time
+  lock-feasibility (ISS-0033 class refused before spend, drift
+  tripwire on the hook glob). Five-branch train verified conflict-free
+  + 209/807 green before merging; dist rebuilt + smoked — next
+  campaign runs all five.
+- Next: launch acts (spec list): README, LICENSE/NOTICE,
   SECURITY.md, CI, ping receiver, write-up, the flip. Daily-lane:
   sonnet-5 + <synthetic> price rows · S2s 132–145 · F1/F3 ·
   torn-dist flake (fix: packaging test packs with lifecycle scripts
