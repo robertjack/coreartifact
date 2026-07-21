@@ -148,7 +148,7 @@ describe("ingest: mixed-model transcript pricing, end to end (F127/F128)", () =>
 
     const transcriptPath = writeTranscript(repoRoot, [
       assistantLine("req_1", "claude-fable-5", 100, 100),
-      assistantLine("req_2", "claude-sonnet-5", 1_000_000, 1_000_000), // unpinned
+      assistantLine("req_2", "claude-opus-4-8", 1_000_000, 1_000_000), // unpinned
     ]);
 
     const lines =
@@ -175,7 +175,7 @@ describe("ingest: mixed-model transcript pricing, end to end (F127/F128)", () =>
     expect(row.cost_usd).toBeNull();
     expect(row.model).toBeNull();
     expect(readCostAbsenceReason(paths.ledger, sessionId)).toBe(
-      COST_ABSENCE_REASONS.modelUnpinned("claude-sonnet-5"),
+      COST_ABSENCE_REASONS.modelUnpinned("claude-opus-4-8"),
     );
   });
 });

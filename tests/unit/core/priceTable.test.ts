@@ -25,8 +25,17 @@ describe("lookupModelRate", () => {
     });
   });
 
+  it("returns the pinned rate for claude-sonnet-5 (observed-tier pin, 2026-07-20)", () => {
+    expect(lookupModelRate("claude-sonnet-5")).toEqual({
+      in: 3.0,
+      out: 15.0,
+      cacheRead: 0.3,
+      write5m: 3.75,
+      write1h: 6.0,
+    });
+  });
+
   it("returns null for a model deliberately unpinned this campaign (never a guessed rate)", () => {
-    expect(lookupModelRate("claude-sonnet-5")).toBeNull();
     expect(lookupModelRate("claude-opus-4-8")).toBeNull();
   });
 
@@ -92,7 +101,7 @@ describe("computeCostUsd", () => {
 
   it("returns null (never zero or an estimate) for an unpinned model", () => {
     expect(
-      computeCostUsd("claude-sonnet-5", {
+      computeCostUsd("claude-opus-4-8", {
         inputTokens: 100,
         outputTokens: 100,
         cacheReadTokens: 0,
@@ -100,5 +109,21 @@ describe("computeCostUsd", () => {
         cacheCreation1hTokens: 0,
       }),
     ).toBeNull();
+  });
+
+  // Observed-tier pin validation (2026-07-20 daily-lane): reproduces one of
+  // the seven real aeh-attempt pairs used to derive the pinned rates —
+  // session f60a4043-186e-4c6e-abd5-d8f07111ad58, ledger tokens cross-
+  // referenced against .aeh/aeh.db attempts.cost_usd (2.2992285), all
+  // cache-creation billed at the 1h TTL rate.
+  it("reproduces a real claude-sonnet-5 aeh-attempt cost exactly at the standard tier (session f60a4043...)", () => {
+    const cost = computeCostUsd("claude-sonnet-5", {
+      inputTokens: 40,
+      outputTokens: 38237,
+      cacheReadTokens: 2389245,
+      cacheCreation5mTokens: 0,
+      cacheCreation1hTokens: 168130,
+    });
+    expect(cost).toBe(2.2992285);
   });
 });

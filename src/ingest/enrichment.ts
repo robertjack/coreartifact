@@ -20,6 +20,23 @@ import { COST_ABSENCE_REASONS, type CostAbsenceReason } from "../core/absence.js
 
 const readFileSync = readFileSyncFn as (path: string, encoding: string) => string;
 
+// Claude Code's own synthetic placeholder model id, observed 2026-07-20
+// (daily-lane) in two real transcripts under
+// ~/.claude/projects/-Users-robbiejack-dev-coreartifact/ (30eb6167...,
+// 7cdc9d81...): a rate-limit error line ("You've hit your weekly/session
+// limit") the CLI itself inserts as an assistant turn, with
+// `message.model === "<synthetic>"` and every usage field (input, output,
+// cache read, cache creation, both TTL splits) zero. It carries no real
+// request cost. Left in the per-request all-or-nothing pinning set, this
+// non-model id (never pinnable — it names no billable model) would
+// unpin the WHOLE session's cost even though it contributes nothing
+// numerically; the live ledger shows exactly this happening for session
+// 7cdc9d81-c46d-4126-b325-240683775f93 (real tokens present, cost/model
+// both NULL, absence reason "model unpinned: <synthetic>"). Excluded here
+// from cost pricing AND from the displayed-model set — real requests in
+// the same transcript price and display normally.
+const SYNTHETIC_MODEL = "<synthetic>";
+
 export interface EnrichmentResult {
   tokensInput: number | null;
   tokensOutput: number | null;
@@ -204,13 +221,20 @@ export function enrichFromTranscript(transcriptPath: string | null): EnrichmentR
   let firstUnpinnedModel: string | null = null;
 
   for (const { model: requestModel, usage } of byRequestId.values()) {
-    distinctModels.add(requestModel);
     inputTokens += usage.inputTokens;
     outputTokens += usage.outputTokens;
     cacheReadTokens += usage.cacheReadTokens;
     cacheCreationTokens += usage.cacheCreationTokens;
     cacheCreation5mTokens += usage.cacheCreation5mTokens;
     cacheCreation1hTokens += usage.cacheCreation1hTokens;
+
+    // The synthetic placeholder never names a real, billable model — skip
+    // it for both pricing and the displayed-model set entirely (see
+    // SYNTHETIC_MODEL above). Its own usage is always observed zero, so
+    // this changes no token sum; it only stops it from poisoning the
+    // all-or-nothing cost pin for the transcript's real requests.
+    if (requestModel === SYNTHETIC_MODEL) continue;
+    distinctModels.add(requestModel);
 
     if (costNumerator === null) continue; // already degraded; keep summing tokens only
     const requestNumerator = computeCostNumerator(requestModel, {

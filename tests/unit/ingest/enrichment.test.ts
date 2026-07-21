@@ -194,12 +194,91 @@ describe("enrichFromTranscript: exact oracle reproduction", () => {
 
 describe("enrichFromTranscript: unpinned model", () => {
   it("keeps tokens present and model recorded, but degrades cost to ABSENT naming the unpinned model", () => {
-    const filePath = writeTranscript([assistantLine("req_1", "claude-sonnet-5", FULL_USAGE)]);
+    const filePath = writeTranscript([assistantLine("req_1", "claude-opus-4-8", FULL_USAGE)]);
     const result = enrichFromTranscript(filePath);
     expect(result.tokensInput).toBe(2);
-    expect(result.model).toBe("claude-sonnet-5");
+    expect(result.model).toBe("claude-opus-4-8");
     expect(result.costUsd).toBeNull();
-    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-sonnet-5"));
+    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-opus-4-8"));
+  });
+});
+
+// Daily-lane, 2026-07-20: claude-sonnet-5 is now pinned (observed-tier,
+// src/core/priceTable.ts), and the CLI's own "<synthetic>" placeholder
+// model (a zero-usage rate-limit assistant line, observed live in
+// ~/.claude/projects/-Users-robbiejack-dev-coreartifact/) must never
+// poison the all-or-nothing cost pin for the real requests around it.
+describe("enrichFromTranscript: claude-sonnet-5 now pinned (observed-tier)", () => {
+  it("prices a claude-sonnet-5 transcript and reproduces a real aeh-attempt cost to the digit (session f60a4043...)", () => {
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-sonnet-5", {
+        input_tokens: 40,
+        output_tokens: 38237,
+        cache_read_input_tokens: 2389245,
+        cache_creation_input_tokens: 168130,
+        cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 168130 },
+      }),
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(40);
+    expect(result.tokensOutput).toBe(38237);
+    expect(result.tokensCacheRead).toBe(2389245);
+    expect(result.model).toBe("claude-sonnet-5");
+    expect(result.costUsd).toBe(2.2992285);
+    expect(result.costAbsenceReason).toBeNull();
+  });
+});
+
+const SYNTHETIC_USAGE = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
+  cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+};
+
+describe("enrichFromTranscript: the synthetic placeholder model never poisons real-request cost", () => {
+  it("a synthetic zero-usage line alongside a real pinned request: cost derives from the real request only", () => {
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-fable-5", usageOf(100, 100)),
+      assistantLine("req_2", "<synthetic>", SYNTHETIC_USAGE),
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(100);
+    expect(result.tokensOutput).toBe(100);
+    expect(result.model).toBe("claude-fable-5"); // synthetic excluded from the displayed-model set too
+    expect(result.costUsd).toBeCloseTo(0.006, 9);
+    expect(result.costAbsenceReason).toBeNull();
+  });
+
+  it("reproduces the live-ledger regression directly: real tokens present, cost/model no longer NULLed by a synthetic line", () => {
+    // Mirrors the actually-observed shape (session 7cdc9d81-...): a real
+    // pinned request plus a synthetic rate-limit line in the same
+    // transcript. Before the fix, the synthetic model's unpinned status
+    // degraded the WHOLE session's cost to ABSENT even though its own
+    // usage was all zero.
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-haiku-4-5-20251001", usageOf(10, 10)),
+      assistantLine("req_2", "<synthetic>", SYNTHETIC_USAGE),
+      assistantLine("req_3", "<synthetic>", SYNTHETIC_USAGE),
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(10);
+    expect(result.tokensOutput).toBe(10);
+    expect(result.model).toBe("claude-haiku-4-5-20251001");
+    expect(result.costUsd).not.toBeNull();
+    expect(result.costAbsenceReason).toBeNull();
+  });
+
+  it("a synthetic line does not save the pin when a DIFFERENT request is genuinely unpinned", () => {
+    const filePath = writeTranscript([
+      assistantLine("req_1", "claude-opus-4-8", usageOf(100, 100)), // genuinely unpinned
+      assistantLine("req_2", "<synthetic>", SYNTHETIC_USAGE),
+    ]);
+    const result = enrichFromTranscript(filePath);
+    expect(result.tokensInput).toBe(100);
+    expect(result.costUsd).toBeNull();
+    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-opus-4-8"));
   });
 });
 
@@ -249,13 +328,13 @@ describe("enrichFromTranscript: mixed-model transcripts (F127)", () => {
   it("degrades cost to ABSENT naming the unpinned model when the mix includes one, but still sums tokens", () => {
     const filePath = writeTranscript([
       assistantLine("req_1", "claude-fable-5", usageOf(100, 100)),
-      assistantLine("req_2", "claude-sonnet-5", usageOf(1_000_000, 1_000_000)), // unpinned
+      assistantLine("req_2", "claude-opus-4-8", usageOf(1_000_000, 1_000_000)), // unpinned
     ]);
     const result = enrichFromTranscript(filePath);
     expect(result.tokensInput).toBe(1_000_100);
     expect(result.tokensOutput).toBe(1_000_100);
     expect(result.costUsd).toBeNull();
-    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-sonnet-5"));
+    expect(result.costAbsenceReason).toBe(COST_ABSENCE_REASONS.modelUnpinned("claude-opus-4-8"));
     // Mixed models (pinned + unpinned) — no single "the model" to display.
     expect(result.model).toBeNull();
   });

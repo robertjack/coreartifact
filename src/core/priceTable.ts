@@ -25,6 +25,29 @@ const MICROS_PER_MTOK = 1_000_000;
 const PRICE_TABLE: Readonly<Record<string, ModelRate>> = {
   "claude-fable-5": { in: 10.0, out: 50.0, cacheRead: 1.0, write5m: 12.5, write1h: 20.0 },
   "claude-haiku-4-5-20251001": { in: 1.0, out: 5.0, cacheRead: 0.1, write5m: 1.25, write1h: 2.0 },
+  // claude-sonnet-5, pinned 2026-07-20 (daily-lane, observed-tier validation
+  // — house law: observed truth over documentation, CLAUDE.md). Documented
+  // pricing names TWO tiers effective now: standard $3.00/$15.00 per MTok,
+  // and an introductory $2.00/$10.00 tier stated to run through
+  // 2026-08-31. Observation overrides the documented intro window: 7
+  // real aeh worker attempts (session ids f60a4043, 4af91a7c, 8fc93fd5,
+  // a0e792c9, e5d1454c, 642aad37, 3b861cb6 — cross-referenced between
+  // .coreartifact/ledger.db sessions.tokens_* [the ISS-0019 dedup-parsed
+  // counts] and .aeh/aeh.db attempts.cost_usd [the envelope oracle]) all
+  // solve EXACTLY for the STANDARD tier with 100% of cache-creation billed
+  // at the 1h TTL rate (write1h = 6.00, i.e. base_std := in*3 + out*15 +
+  // cacheRead*0.3; in every one of the 7 pairs, (cost*1e6 - base_std) /
+  // cacheCreationTokens == 6.0 to the observed decimal, zero residual).
+  // The intro tier does not fit any pair under any 5m/1h mix (residual
+  // rate exceeds even its own 1h max). Structural rule holds at the
+  // standard tier's own multiples (cacheRead = 0.1x in, write5m = 1.25x
+  // in, write1h = 2x in) — same shape as the other two pinned rows, just
+  // the higher of the two documented tiers. If the intro tier turns out to
+  // start billing later (2026-08-31 boundary) or sooner for other
+  // accounts, doctor's fragile-dependency drift check is the mechanism to
+  // catch it — this pin is not meant to survive silently past that date
+  // unchecked.
+  "claude-sonnet-5": { in: 3.0, out: 15.0, cacheRead: 0.3, write5m: 3.75, write1h: 6.0 },
 };
 
 /** The pinned rate for an exact model id string, or null when deliberately unpinned. */
