@@ -181,9 +181,17 @@ findings section and the decisions log.
   surface) · CONTRIBUTING.md (personal-first, no PRs pre-1.0) · CI
   (three gates, macos-15 — the only proven environment; actionlint
   clean; runs on first push to GitHub). Full gates re-verified bound.
-- Next: launch acts remaining — ping receiver (Worker on
-  coreartifact.com, before the flip) · write-up (operator voice) ·
-  the flip (operator decision). Daily-lane: sonnet-5 + <synthetic>
+- Launch act 6 DONE (2026-07-20, 75427ec): ping receiver LIVE at
+  coreartifact.com/ping — custom-domain Worker, AE dataset
+  coreartifact_pings (index install_id, blob version, nothing else
+  stored — privacy law server-side); 204/405/400/413/404 shapes
+  verified live; dist's pinned PING_ENDPOINT proven 204 end-to-end.
+  Near-miss: wrangler cache (account id + operator geolocation)
+  briefly committed — caught and amended OUT before any push;
+  .wrangler/ now gitignored (public-history law: check every commit's
+  file list, not just the diff).
+- Next: launch acts remaining — write-up (operator voice) · the flip
+  (operator decision). Daily-lane: sonnet-5 + <synthetic>
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
   notes. Geography in docs/map.md.
