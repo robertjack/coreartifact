@@ -92,20 +92,30 @@ embarrassing and correct, in that order.
 
 Claude Code's hook payloads are undocumented surface, so the project
 keeps a dated register of observed facts (`docs/recording-pass.md`) and
-refuses to assert platform behavior from memory. Four recording passes
-across five Claude Code versions caught, among other things: a hook
+refuses to assert platform behavior from memory. Five recording passes
+across six Claude Code versions caught, among other things: a hook
 subscription that silently changes host behavior rather than observing
 it; a session-kind signal that looked obvious and was wrong until a
 controlled 2×2 disambiguated it; and a `/clear` session shape that the
 classifier initially mislabeled — fixed by a demote-only rule that
 prefers ABSENT over a guess.
 
-The mechanism still works in launch week: when Claude Code 2.1.215
-landed on my machine, the dashboard raised a drift banner naming the
-first session outside the tested range. The same day, a fresh recording
-pass re-verified every fragile signal on .215 and the range was bumped —
-with the amendment tripping two deliberate test pins on the way, exactly
-as they were designed to do (`docs/gotchas.md`, #7).
+The mechanism still works in launch week — twice. Claude Code shipped
+2.1.215 and then 2.1.216 on consecutive days; each time the dashboard
+raised a drift banner naming the first session outside the tested range,
+and each time a recording pass re-verified every fragile signal before
+the range moved (the .216 interactive cell closed from live dogfood
+sessions — observed truth, not a lab rig). The bump amendments tripped
+the deliberate test pins on the way, exactly as designed
+(`docs/gotchas.md`, #7).
+
+One more receipt from the final day: a pre-launch audit — run against
+the installed tarball, not the repo — found that a resumed session
+violates the rebuild law in one facet (`source: "resume"` emits a
+second SessionStart the fold didn't anticipate). The bug was fixed,
+regression-pinned, and the live ledger deleted and re-ingested
+identically before anything shipped. The audit is in the history like
+everything else.
 
 ## What to read if you're skeptical
 
@@ -128,7 +138,7 @@ Skepticism is the intended response. Start here:
 No teams, no sync, no hosted anything, no CI enforcement, no multi-agent
 orchestration — the non-goals are walled in the spec, and each wall
 re-opens only on a named condition, not on enthusiasm. It supports
-Claude Code on a tested version range (currently 2.1.208–2.1.215),
+Claude Code on a tested version range (currently 2.1.208–2.1.216),
 degrades honestly outside it, and runs wherever Node ≥ 22.13 runs.
 
 ## Try it
