@@ -259,9 +259,20 @@ findings section and the decisions log.
   ?repo= control api.md always had; options accumulate across scoped
   loads, URL-persisted, basename labels w/ full-root fallback) — first
   post-launch user-feedback feature, suite 92/624.
+  .216 CLOSED (keyboard cell from live coretest dogfood n=3, range
+  2.1.208–2.1.216, six pin sites, banner retired). ISS-0034 MERGED
+  (875ac09, by-hand rescue after a FIRST implementation-fault
+  escalation — rulings A–G in the spec; re-review MERGE with two
+  residuals fixed pre-merge: uninstall inventory discloses the skill,
+  full directory inversion incl. the standalone seam + dir-aware
+  snapshot): init now installs the coreartifact SKILL.md — agents
+  self-verify by default; --no-skill opts out; drift is doctor's.
+  aeh idea filed (e434ca9): cart-check wrap misses in issue worktrees
+  (detect from projectRoot) — workers' costs derive now but checks
+  stay unbound until it lands. 0.1.2 STAGED (range bump + skill),
+  awaiting operator OTP publish.
   REMAINING post-launch: write-up voice pass + posting (draft
-  banner in tree, honestly) · .216 keyboard cell → range bump →
-  banner retire · expand-gate watch begins (ping receiver live).
+  banner in tree, honestly) · expand-gate watch (ping receiver live).
   Daily-lane: sonnet-5 + <synthetic>
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
