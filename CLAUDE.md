@@ -246,9 +246,13 @@ findings section and the decisions log.
   2.1.216 scripted cells DONE same day (finding 15, register holds;
   fixtures at tests/fixtures/recpass-2.1.216/) — keyboard cell +
   range bump pending.
-- Next: the flip (operator decision — repo public, private:true
-  removed, publish over the placeholder + fix its MIT stamp), after
-  the write-up edit. Daily-lane: sonnet-5 + <synthetic>
+- THE FLIP (2026-07-21): repo PUBLIC (gitleaks full-history clean,
+  216 commits, no private paths tracked) · private:true removed ·
+  version 0.1.0 (pre-1.0 semver truth; spec "v1" = spec scope, not
+  1.0.0). REMAINING: npm publish 0.1.0 over the MIT-stamped 0.0.0
+  placeholder — blocked on `npm login` (expired auth, interactive) ·
+  write-up voice pass (draft banner in tree, honestly) · .216
+  keyboard cell → range bump → banner retire. Daily-lane: sonnet-5 + <synthetic>
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
   notes. Geography in docs/map.md.
