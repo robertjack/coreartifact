@@ -563,3 +563,18 @@ oracles at `tests/fixtures/recpass-2.1.216/`.
   keyboard cell is the only human minute. If the cadence holds
   post-launch, `coreartifact record` (the spec's v1.1 roadmap item)
   earns its slot.
+
+## Recording pass 2.1.216 — CLOSED (2026-07-21, live dogfood keyboard cells)
+
+The interactive fresh-startup cell closed with n=3 from the operator's
+own live spool (the finding-9 precedent: observed truth from real use,
+not a scratch recording): coretest sessions `970b8646`, `7ed86550`,
+`fc3d76bc` — all `source: "startup"` with `model` present, all
+transcripts self-identifying `2.1.216`, captured verbatim by the
+production hook. Finding 3's signal survives on 2.1.216 everywhere it
+is defined.
+
+**Tested range bumped 2.1.208–2.1.216** (spec stance +
+`TESTED_CLAUDE_CODE_RANGE` + README stamp + the overview drift pins +
+both unit tripwires, amended together — gotcha #7's fourth exercise;
+the npm README carries the new stamp at the next publish).

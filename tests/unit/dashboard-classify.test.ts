@@ -95,7 +95,7 @@ describe("classify.ts: isVersionInRange (numeric, dotted-segment comparison)", (
 
   test("a version strictly below min or above max is out of range", () => {
     expect(isVersionInRange("2.1.207", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
-    expect(isVersionInRange("2.1.216", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
+    expect(isVersionInRange("2.1.217", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
   });
 
   test("comparison is numeric per segment, not lexicographic — '2.1.9' vs '2.1.10'", () => {
@@ -115,7 +115,7 @@ describe("classify.ts: isVersionInRange (numeric, dotted-segment comparison)", (
 // Finding 138 companion: suffixed versions compare by their numeric triple.
 describe("isVersionInRange: suffixed semver", () => {
   test("a -prerelease of an in-range triple is in range; of an above-max triple is not", () => {
-    expect(isVersionInRange("2.1.215-beta", TESTED_CLAUDE_CODE_RANGE)).toBe(true);
+    expect(isVersionInRange("2.1.216-beta", TESTED_CLAUDE_CODE_RANGE)).toBe(true);
     expect(isVersionInRange("2.1.220-rc.1", TESTED_CLAUDE_CODE_RANGE)).toBe(false);
   });
 });

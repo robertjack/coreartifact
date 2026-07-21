@@ -56,7 +56,7 @@ passed" into a bound, queryable fact.
 
 ## Tested Claude Code range
 
-Facets are verified against Claude Code **2.1.208 – 2.1.215** (see the
+Facets are verified against Claude Code **2.1.208 – 2.1.216** (see the
 dated findings in `docs/recording-pass.md`). Outside that range, capture
 still records everything; derived facets may degrade to ABSENT, and
 `cart doctor` names which ones and why. Nothing is ever guessed to
