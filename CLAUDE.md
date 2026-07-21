@@ -196,6 +196,21 @@ findings section and the decisions log.
   $378.06, 33 issues, test-side-only escalations, the honest 0-of-35
   headline, 4 recording passes / 5 versions). Awaiting operator voice
   pass.
+- PRE-LAUNCH E2E AUDIT (2026-07-20, dynamic workflow, 11 agents):
+  installed-from-tarball simulation of real use — 4 scenarios (verified
+  happy path · failing+unverified · degradation honesty · dashboard
+  API + uninstall), each adversarially re-verified; 3/4 clean, the 4th
+  "failure" was a mis-briefed expectation (the hook DROPS non-JSON
+  with exit 0 by contract — no bug). Unverified-sessions answer:
+  39/45 are aeh workers with ZERO checks (raw gates, fixed by aeh
+  PR #7); 41 of 42 bound checks sit on operator sessions the headline
+  deliberately never classifies (overview rates headless only). ONE
+  REAL DEFECT found + FIXED same day (7025ff0): rebuild law —
+  source:"resume" second SessionStart (finding 14, fourth mode, no
+  model) made batch fold (last-wins) diverge from incremental COALESCE
+  on sha_before; fold now first-non-null per facet, regression-pinned,
+  live ledger cleared + re-ingested identical (45 sessions). S3 noted:
+  cart with no args exits 0 printing usage (daily-lane).
 - Next: the flip (operator decision — repo public, private:true
   removed, publish over the placeholder + fix its MIT stamp), after
   the write-up edit. Daily-lane: sonnet-5 + <synthetic>
