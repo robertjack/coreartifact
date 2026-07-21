@@ -277,11 +277,21 @@ describe("ISS-0027 open command + dashboard server core (the GET wall)", () => {
 
   it(
     "Run without --port, coreartifact open --no-browser attempts the default port 2278 first and prints a URL whose port is 2278 when it is free; when 2278 is already bound the server binds an ephemeral port instead and the printed URL carries that port, and in both cases the printed URL is the authoritative one a GET succeeds against.",
-    async () => {
+    async (ctx) => {
       assertBuilt();
       const free = await canBind(DEFAULT_PORT);
       if (!free) {
-        throw new Error(`test invariant: port ${DEFAULT_PORT} must be free on this machine before this test runs`);
+        // Retro addendum (docs/prd/PRD-0003-dashboard/retro.md, post-retro
+        // addendum): a real dashboard the operator is dogfooding (or any
+        // other process) can legitimately hold 2278 — that is not a defect,
+        // and this test must never turn that ordinary state of the machine
+        // into a false red. Skip with the collision named, rather than
+        // failing or silently passing; when 2278 is free this test runs
+        // exactly as it always has.
+        ctx.skip(
+          `port ${DEFAULT_PORT} is already bound on this machine (e.g. a live \`coreartifact open\` dashboard) — skipping the default-port criterion rather than false-redding the suite`,
+        );
+        return;
       }
 
       // Free case.

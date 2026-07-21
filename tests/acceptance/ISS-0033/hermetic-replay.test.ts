@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, readFile, writeFile, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -154,6 +155,10 @@ describe('ISS-0033 hermetic replay by construction', () => {
     expect(payload.transcript_path).not.toBe(leftoverTranscriptPath);
     expect(String(payload.transcript_path).startsWith(pinRoot)).toBe(true);
     await expect(readFile(payload.transcript_path)).rejects.toThrow();
+    expect(
+      existsSync(payload.transcript_path),
+      'the pinned sentinel path must not exist at all (a directory would pass the rejects.toThrow check via EISDIR without being a genuinely absent path)',
+    ).toBe(false);
 
     if (typeof h.ingest !== 'function') {
       throw new Error('harness.ingest is not implemented yet');

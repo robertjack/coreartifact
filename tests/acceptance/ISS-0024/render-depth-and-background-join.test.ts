@@ -224,6 +224,11 @@ describe("ISS-0024 render depth (R12) + the backgrounded-outcome join (R14)", ()
         showAbsent.stdout,
         "a session with no test-results facet must not fabricate a test-results badge",
       ).not.toMatch(/\d+ passed, \d+ failed/);
+      const absentTestsLine = findLineWithAll(showAbsent.stdout, ["tests:"]);
+      expect(
+        absentTestsLine,
+        "the session-level tests line must carry the explicit absent marker, not be silently blank",
+      ).toContain(ABSENT_MARKER);
     },
     60000,
   );
