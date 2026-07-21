@@ -211,6 +211,18 @@ findings section and the decisions log.
   on sha_before; fold now first-non-null per facet, regression-pinned,
   live ledger cleared + re-ingested identical (45 sessions). S3 noted:
   cart with no args exits 0 printing usage (daily-lane).
+- Pre-flip hygiene (2026-07-20/21): 10 stale PRD-0001 GitHub mirror
+  issues closed (zero open issues) · findings-status audit swept 40
+  "open" rows — 32 flipped resolved with current-code evidence, 8
+  remain genuinely open (all S3: 148/149/150/152/153/181/183/184 —
+  the daily-lane residual bucket, now the precise list) · CI run #1
+  (first-ever execution at the engines floor, node 22.13) caught
+  node:sqlite ExperimentalWarning polluting two stderr contracts +
+  a 1s lock-test margin — fixed (stripNodeDiagnostics harness helper,
+  7s margin), verified at 22.13 AND 24, pushed 9d43cf3. KNOWN: cart on
+  node 22.x prints the sqlite ExperimentalWarning to stderr (cosmetic,
+  daily-lane/README candidate). Claude Code now 2.1.216 — drift banner
+  up again on any ledger with .216 sessions; pass pending.
 - Next: the flip (operator decision — repo public, private:true
   removed, publish over the placeholder + fix its MIT stamp), after
   the write-up edit. Daily-lane: sonnet-5 + <synthetic>
