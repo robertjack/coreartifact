@@ -8,6 +8,7 @@
 // live to the caller's own process.stdout/stderr, AND captured into the
 // returned result for the spool line.
 import { describe, it, expect, afterEach } from "vitest";
+import { constants as osConstants } from "node:os";
 import { runCheckedCommand } from "../../../src/check/run.js";
 import { capOutput } from "../../../src/check/cap.js";
 import { serializeCheckLine } from "../../../src/core/envelope.js";
@@ -190,5 +191,47 @@ describe("runCheckedCommand: bounded retention (F125)", () => {
     );
     expect(capped.truncated).toBe(true);
     expect(capped.output).not.toMatch(/�/);
+  });
+});
+
+// F148 (S3): a wrapped command whose binary can't even be spawned (ENOENT)
+// used to reject the returned promise, which propagated all the way out
+// through checkCommand's un-guarded `await` as an uncaught crash -- NOTHING
+// landed in the spool, the exact silent-evidence-loss shape this issue
+// exists to prevent. A spawn failure must instead resolve like any other
+// failed run: a nonzero exit code (the conventional 127, "command not
+// found") and the error's own message as the output, so the caller can
+// still build and write a normal check line.
+describe("runCheckedCommand: spawn failure records evidence (F148)", () => {
+  it("resolves (never rejects) with exit code 127 and the spawn error's message as output", async () => {
+    const result = await runCheckedCommand(["coreartifact-daily-lane-does-not-exist-anywhere-on-path"]);
+
+    expect(result.exitCode, "an unspawnable command must record the conventional 127, not crash").toBe(127);
+    expect(
+      result.output,
+      "the spawn error's own message must be captured as the check's output, not silently dropped",
+    ).toMatch(/ENOENT|not found|coreartifact-daily-lane-does-not-exist-anywhere-on-path/);
+  });
+});
+
+// F150 (S3): signal -> exit code used to go through a hand-written table of
+// Linux signal numbers, which is wrong on darwin (e.g. SIGBUS is 7 on Linux
+// but 10 on darwin). Deriving the table from node:os's own
+// platform-reported `constants.signals` makes this correct on whatever
+// platform the test itself runs on, with no hardcoded per-OS number in the
+// test either. SIGUSR2 (not SIGUSR1) is used to self-signal: Node treats an
+// incoming SIGUSR1 specially (it starts the inspector rather than
+// terminating the process), which would make this test measure Node's own
+// debugger handling instead of the signal-to-exit-code mapping.
+describe("runCheckedCommand: portable signal-to-exit-code mapping (F150)", () => {
+  it("maps a killed child's signal to 128 + the PLATFORM's own signal number", async () => {
+    const script = "process.kill(process.pid, 'SIGUSR2');";
+    const result = await runCheckedCommand(["node", "-e", script]);
+
+    const expectedExitCode = 128 + (osConstants.signals as Record<string, number>).SIGUSR2;
+    expect(
+      result.exitCode,
+      "the reported exit code must be 128 + this platform's own SIGUSR2 number, not a hardcoded Linux value",
+    ).toBe(expectedExitCode);
   });
 });

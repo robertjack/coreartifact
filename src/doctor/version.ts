@@ -15,9 +15,9 @@ declare const process: { env: Record<string, string | undefined> };
 
 import { scrubbedEnv } from "../core/attribution.js";
 
-// The tested version range — the README's stamp (no README exists in the
-// tree yet; this constant is the source of truth). Bump on the next
-// recording pass; one constant, one place.
+// The tested version range — the README's stamp (README.md now ships the
+// stamp; this constant is the source of truth it's stamped from). Bump on
+// the next recording pass; one constant, one place.
 export const TESTED_CLAUDE_CODE_RANGE = {
   min: "2.1.208",
   max: "2.1.215",

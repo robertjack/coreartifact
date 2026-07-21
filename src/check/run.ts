@@ -38,6 +38,8 @@
 
 // @ts-ignore -- node:child_process has no ambient types available in this sandbox
 import { spawn as spawnFn } from "node:child_process";
+// @ts-ignore -- node:os has no ambient types available in this sandbox
+import { constants as osConstantsFn } from "node:os";
 import { CHECK_OUTPUT_CAP_BYTES } from "./cap.js";
 
 // Chunks off a child's stdio pipe are raw Buffers. Decoding each chunk to
@@ -88,28 +90,16 @@ declare const process: {
   stderr: { write(chunk: NodeBufferLike): boolean };
 };
 
-// Conventional Unix signal numbers for the names a killed child process
-// reports (Node's own `on("close", (code, signal))` gives the signal name,
-// never its number). Only the signals Node can actually report here are
+// Signal name -> number, read from node:os's own platform-reported table
+// (F150) rather than a hand-maintained constant map. The previous
+// hand-written table hard-coded Linux numbers (e.g. SIGBUS: 7, SIGUSR1: 10,
+// SIGUSR2: 12) which are WRONG on darwin (SIGBUS: 10, SIGUSR1: 30,
+// SIGUSR2: 31 -- verified via `node -e "console.log(require('os').constants.signals)"`
+// on this machine) -- portable by construction, no table to drift as
+// platforms are added. Only the signals Node can actually report here are
 // listed; an unrecognized name still yields a nonzero, named-in-spirit exit
 // via the 128 floor rather than silently claiming success.
-const SIGNAL_NUMBERS: Record<string, number> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGILL: 4,
-  SIGTRAP: 5,
-  SIGABRT: 6,
-  SIGBUS: 7,
-  SIGFPE: 8,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGSEGV: 11,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-};
+const SIGNAL_NUMBERS: Record<string, number> = osConstantsFn.signals as Record<string, number>;
 
 function exitCodeFor(code: number | null, signal: string | null): number {
   if (code !== null) return code;
@@ -176,8 +166,28 @@ export function runCheckedCommand(
       process.stderr.write(chunk);
       retain(chunk);
     });
-    child.on("error", reject);
+
+    // F148 (S3): a spawn failure (e.g. ENOENT -- the wrapped command's
+    // binary doesn't exist) used to `reject` here, which propagated as an
+    // uncaught rejection all the way out through checkCommand's un-guarded
+    // `await` -- the process crashed and NOTHING landed in the spool. The
+    // evidence law says failures are evidence too: a spawn failure is
+    // recorded as a check line exactly like any other failed run, using the
+    // conventional "command not found" exit code (127) with the error's own
+    // message as the output, rather than crashing or staying silent. `close`
+    // never fires after a spawn-time `error` for this failure shape, but the
+    // flag still guards against any double-settle if that assumption ever
+    // proves wrong for some platform/child-process edge case.
+    let settled = false;
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      const message = err instanceof Error ? err.message : String(err);
+      resolvePromise({ exitCode: 127, output: message });
+    });
     child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
       // Only the bounded retained subset is ever concatenated+decoded --
       // never the full, unbounded stream (F125's fix: this is what keeps
       // both memory AND this Buffer.concat/toString call bounded regardless
