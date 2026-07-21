@@ -91,14 +91,22 @@ describe("ISS-0009 packaging: the tarball, the two bins, and the npx path", () =
       // Step 1: pnpm pack the repo into a tmpdir. globalSetup has already
       // built dist/ once in vitest's root process before any test file ran
       // (tests/acceptance/harness/globalSetup.ts), so this pack operates on
-      // real built output, not stale or missing dist/.
+      // real built output, not stale or missing dist/. Lifecycle scripts are
+      // ignored for exactly that reason: `prepack: pnpm run build` would
+      // rewrite dist/ file-by-file WHILE concurrent workers import it — the
+      // torn-dist flake (two field sightings, root-caused 2026-07-20; checks
+      // 289 and 6311 in the live ledger).
       const packOutDir = mkdtempSync(join(tmpdir(), "coreartifact-pack-"));
       cleanupDirs.push(packOutDir);
 
-      const packResult = spawnSync("pnpm", ["pack", "--pack-destination", packOutDir], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-      });
+      const packResult = spawnSync(
+        "pnpm",
+        ["pack", "--config.ignore-scripts=true", "--pack-destination", packOutDir],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+        },
+      );
       expect(packResult.status, `pnpm pack failed: ${packResult.stderr}`).toBe(0);
 
       const tgzName = readdirSync(packOutDir).find((name) => name.endsWith(".tgz"));
