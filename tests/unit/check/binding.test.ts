@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveBinding } from "../../../src/check/binding.js";
+import { resolveBinding, renderSingleOpenBindingNotice } from "../../../src/check/binding.js";
 
 describe("resolveBinding", () => {
   it("binds standalone (null, null) with zero open sessions", () => {
@@ -48,5 +48,19 @@ describe("resolveBinding", () => {
       knownSessionIds: new Set(["sess-a"]),
     });
     expect(result).toEqual({ ok: false, unknownSessionId: "sess-ghost" });
+  });
+});
+
+// 2026-07-21 dogfood finding: the single-open fallback attributed a
+// human-run check to the open agent session with nothing printed at run
+// time. The notice is the bind-time half of the fix (the render half lives
+// in src/render/show.ts / log.ts) — pure string, tested at the same
+// no-I/O seam as resolveBinding.
+describe("renderSingleOpenBindingNotice", () => {
+  it("names the auto-bound session, the single-open mode, and the explicit alternative", () => {
+    const notice = renderSingleOpenBindingNotice("sess-a");
+    expect(notice).toContain("sess-a");
+    expect(notice).toContain("single-open");
+    expect(notice).toContain("--session");
   });
 });

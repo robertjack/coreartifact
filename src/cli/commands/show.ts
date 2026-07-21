@@ -277,12 +277,13 @@ export async function showCommand(args: string[]): Promise<number> {
     // ISS-0024 R12: one badge line per bound check, session-scoped (never a
     // standalone check — session_id NULL never matches this query).
     const checkRows = db
-      .prepare("SELECT name, exit_code, truncated FROM checks WHERE session_id = ?")
-      .all(sessionId) as Pick<CheckRow, "name" | "exit_code" | "truncated">[];
+      .prepare("SELECT name, exit_code, truncated, bound_by FROM checks WHERE session_id = ?")
+      .all(sessionId) as Pick<CheckRow, "name" | "exit_code" | "truncated" | "bound_by">[];
     const checkBadges: CheckBadge[] = checkRows.map((row) => ({
       name: row.name,
       passed: row.exit_code === 0,
       truncated: row.truncated === 1,
+      boundBy: row.bound_by,
     }));
 
     // ISS-0024 R14: the join candidate set for deriveBackgroundedOutcome — a

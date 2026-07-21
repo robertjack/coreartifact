@@ -277,6 +277,18 @@ findings section and the decisions log.
   price rows · S2s 132–145 · F1/F3 · ISS-0027 default-port test vs a
   running dashboard (retro addendum) · findings 194/195 breadth
   notes. Geography in docs/map.md.
+- By-hand (operator-directed, 2026-07-21): single-open binding made
+  visible. Dogfood finding in the coretest sandbox: a human-run `check`
+  in a second terminal auto-bound to the open agent session,
+  indistinguishable from the agent's own evidence in `show`. Fix in
+  three surfaces — bind-time stderr notice naming the session
+  (src/check/binding.ts renderSingleOpenBindingNotice), a
+  `bound_by: single-open` badge suffix in `show`, an `(N single-open)`
+  overlay on `log`'s checks column; explicit bindings stay unmarked and
+  byte-identical. Additive tests only, 650 pass; gates recorded
+  standalone in this repo's ledger (honest — no open session here).
+  Committed to main and the global `cart` reinstalled from the repo
+  the same day (operator-directed).
 
 ## Repo conventions
 

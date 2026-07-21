@@ -76,11 +76,20 @@ export interface CheckBadge {
   name: string;
   passed: boolean;
   truncated: boolean;
+  // How the check got its session (ledger `checks.bound_by`). Optional so
+  // the addition stays source-compatible with existing callers, same
+  // stance as TimelineEntry.testResults below. Only "single-open" renders
+  // a marker: explicit is the named-by-the-runner default, while a
+  // single-open binding is inferred attribution the evidence reader could
+  // not otherwise see (2026-07-21 dogfood finding: a human-run check in a
+  // second terminal was indistinguishable from the agent's own).
+  boundBy?: "single-open" | "explicit" | null;
 }
 
 function renderCheckBadge(check: CheckBadge): string {
   const truncatedText = check.truncated ? "  truncated: true" : "";
-  return `check: ${check.name}  ${check.passed ? "pass" : "fail"}${truncatedText}`;
+  const boundByText = check.boundBy === "single-open" ? "  bound_by: single-open" : "";
+  return `check: ${check.name}  ${check.passed ? "pass" : "fail"}${truncatedText}${boundByText}`;
 }
 
 function renderChecks(checks: CheckBadge[]): string {

@@ -56,6 +56,32 @@ describe("renderShow: check badges (ISS-0024 R12)", () => {
   });
 });
 
+// 2026-07-21 dogfood finding: a single-open-bound check (a check run with no
+// --session, auto-attributed to the lone open session) rendered identically
+// to an explicitly bound one, so a human-run check in a second terminal was
+// indistinguishable from the agent's own evidence. The badge line now names
+// the single-open case; explicit stays unmarked as the default.
+describe("renderShow: check badge binding marker (single-open)", () => {
+  it("marks a single-open-bound check on its badge line", () => {
+    const checks: CheckBadge[] = [{ name: "build", passed: true, truncated: false, boundBy: "single-open" }];
+    const output = renderShow(baseHeader, checks, baseEntries);
+    expect(output).toContain("check: build  pass  bound_by: single-open");
+  });
+
+  it("renders an explicit binding unmarked — byte-identical to a badge carrying no boundBy at all", () => {
+    const explicit: CheckBadge[] = [{ name: "test", passed: false, truncated: false, boundBy: "explicit" }];
+    const bare: CheckBadge[] = [{ name: "test", passed: false, truncated: false }];
+    expect(renderShow(baseHeader, explicit, baseEntries)).toBe(renderShow(baseHeader, bare, baseEntries));
+    expect(renderShow(baseHeader, explicit, baseEntries)).not.toMatch(/bound_by/);
+  });
+
+  it("composes with the truncated flag on one line", () => {
+    const checks: CheckBadge[] = [{ name: "t", passed: true, truncated: true, boundBy: "single-open" }];
+    const output = renderShow(baseHeader, checks, baseEntries);
+    expect(output).toContain("check: t  pass  truncated: true  bound_by: single-open");
+  });
+});
+
 describe("renderShow: session-level test-results-absent (ISS-0024 S1)", () => {
   it("renders one explicit tests: absent-marker line when the session has no test_results row at all", () => {
     const output = renderShow({ ...baseHeader, hasTestResults: false }, [], baseEntries);

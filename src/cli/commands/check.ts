@@ -36,7 +36,7 @@ import { resolveAttribution } from "../../core/attribution.js";
 import { serializeCheckLine } from "../../core/envelope.js";
 import { ingestAndResolveSessions } from "../../ingest/index.js";
 import { parseCheckArgv } from "../../check/argv.js";
-import { resolveBinding } from "../../check/binding.js";
+import { resolveBinding, renderSingleOpenBindingNotice } from "../../check/binding.js";
 import { capOutput } from "../../check/cap.js";
 import { runCheckedCommand } from "../../check/run.js";
 
@@ -77,6 +77,14 @@ export async function checkCommand(args: string[]): Promise<number> {
   if (!binding.ok) {
     process.stderr.write(`coreartifact check: unknown --session id: ${binding.unknownSessionId}\n`);
     return 1;
+  }
+
+  // Single-open fallback: say WHERE the check is about to land, before the
+  // wrapped command runs (a long build should not hide the attribution
+  // until it finishes). stderr, never stdout — the wrapped command's own
+  // streams pass through untouched (src/check/run.ts).
+  if (binding.boundBy === "single-open" && binding.sessionId !== null) {
+    process.stderr.write(`${renderSingleOpenBindingNotice(binding.sessionId)}\n`);
   }
 
   const runResult = await runCheckedCommand(parsed.command);

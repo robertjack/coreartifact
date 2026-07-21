@@ -84,6 +84,7 @@ function countFootprint(db: SqliteDatabase, sessionId: string): number {
 
 interface CheckExitCodeRow {
   exit_code: number;
+  bound_by: string | null;
 }
 
 // ISS-0024 R12: the checks column — pass/fail derived from exit code 0,
@@ -91,17 +92,19 @@ interface CheckExitCodeRow {
 // standalone checks (session_id NULL) — they belong to no session line in
 // v1 (spec "Render (R12)"), not silently dropped, just out of this column's
 // scope; they stay reachable in the ledger's own `checks` table.
-function countChecks(db: SqliteDatabase, sessionId: string): { pass: number; fail: number } {
+function countChecks(db: SqliteDatabase, sessionId: string): { pass: number; fail: number; singleOpen: number } {
   const rows = db
-    .prepare("SELECT exit_code FROM checks WHERE session_id = ?")
+    .prepare("SELECT exit_code, bound_by FROM checks WHERE session_id = ?")
     .all(sessionId) as CheckExitCodeRow[];
   let pass = 0;
   let fail = 0;
+  let singleOpen = 0;
   for (const row of rows) {
     if (row.exit_code === 0) pass++;
     else fail++;
+    if (row.bound_by === "single-open") singleOpen++;
   }
-  return { pass, fail };
+  return { pass, fail, singleOpen };
 }
 
 export async function logCommand(): Promise<number> {
@@ -154,6 +157,7 @@ export async function logCommand(): Promise<number> {
         costUsd: session.cost_usd,
         checksPass: checks.pass,
         checksFail: checks.fail,
+        checksSingleOpen: checks.singleOpen,
       });
     }
   });

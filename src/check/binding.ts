@@ -37,3 +37,15 @@ export function resolveBinding(input: ResolveBindingInput): ResolveBindingResult
 
   return { ok: true, sessionId: null, boundBy: null };
 }
+
+// The bind-time notice for the single-open fallback, printed to stderr by
+// the check command the moment binding resolves. Explicit binding stays
+// silent (the runner named the session themselves); single-open is the one
+// path where attribution is inferred, and until now it was invisible until
+// `show` — 2026-07-21 dogfood finding: a human-run `check` in a second
+// terminal silently landed in the open agent session's evidence,
+// indistinguishable from the agent's own checks. Pure string, same
+// no-I/O stance as resolveBinding above.
+export function renderSingleOpenBindingNotice(sessionId: string): string {
+  return `coreartifact check: bound to open session ${sessionId} (single-open; pass --session to bind explicitly)`;
+}

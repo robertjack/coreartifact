@@ -35,6 +35,13 @@ export interface SessionLineInput {
   // dropped, just out of `log`'s v1 one-line-per-session scope.
   checksPass: number;
   checksFail: number;
+  // Overlay count, not a third bucket: how many of the counted checks were
+  // auto-bound by the single-open fallback rather than an explicit
+  // --session (the pass/fail counts above already include them). Optional
+  // for source compatibility; zero or absent renders nothing — the marker
+  // exists only for the attribution-risk case (2026-07-21 dogfood finding,
+  // see src/check/binding.ts).
+  checksSingleOpen?: number;
 }
 
 // Short id: a prefix of the full session_id, long enough to disambiguate
@@ -45,6 +52,7 @@ function shortId(sessionId: string): string {
 
 export function renderSessionLine(input: SessionLineInput): string {
   const kindText = input.kind ?? ABSENT_MARKER;
+  const singleOpenText = input.checksSingleOpen ? ` (${input.checksSingleOpen} single-open)` : "";
   return [
     shortId(input.sessionId),
     input.repoRoot,
@@ -53,7 +61,7 @@ export function renderSessionLine(input: SessionLineInput): string {
     input.startedAt,
     `cmds:${input.commandCount}`,
     `files:${input.footprintCount}`,
-    `checks:${input.checksPass} pass, ${input.checksFail} fail`,
+    `checks:${input.checksPass} pass, ${input.checksFail} fail${singleOpenText}`,
     `cost:${renderCostUsd(input.costUsd)}`,
   ].join("  ");
 }

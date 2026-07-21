@@ -73,6 +73,20 @@ describe("renderSessionLine", () => {
     expect(line.toLowerCase()).toMatch(/0 pass/);
     expect(line.toLowerCase()).toMatch(/0 fail/);
   });
+
+  // 2026-07-21 dogfood finding (see src/check/binding.ts): single-open
+  // bindings are an overlay on the pass/fail counts, marked only when
+  // nonzero — the all-explicit common case stays byte-identical.
+  it("appends a single-open overlay to the checks column when any check was auto-bound", () => {
+    const line = renderSessionLine({ ...baseInput, checksPass: 2, checksFail: 1, checksSingleOpen: 1 });
+    expect(line).toContain("checks:2 pass, 1 fail (1 single-open)");
+  });
+
+  it("renders no single-open marker when every binding was explicit — byte-identical to a line with no overlay field at all", () => {
+    const explicit = renderSessionLine({ ...baseInput, checksSingleOpen: 0 });
+    expect(explicit).toBe(renderSessionLine(baseInput));
+    expect(explicit).not.toContain("single-open");
+  });
 });
 
 describe("renderSessionLines", () => {
