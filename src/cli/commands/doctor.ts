@@ -22,7 +22,7 @@ import { resolveAttribution } from "../../core/attribution.js";
 import { findWorktreeGaps } from "../../worktree-gap.js";
 import { getAllAbsences, type AbsenceRow } from "../../core/absence.js";
 import { getRunningClaudeVersion } from "../../doctor/version.js";
-import { buildDoctorReport } from "../../doctor/report.js";
+import { buildDoctorReport, report as reportSkillDrift } from "../../doctor/report.js";
 
 const existsSync = existsSyncFn as (path: string) => boolean;
 
@@ -109,6 +109,16 @@ export async function doctorCommand(): Promise<number> {
     worktreeScanError,
   });
 
-  process.stdout.write(`${report.lines.join("\n")}\n`);
-  return report.exitCode;
+  // Skill drift (ISS-0034 ruling 3): a separate, install-surface-only check
+  // -- silent when no skill is installed, named once when the installed
+  // bytes differ from the running package's canonical text. Rescue Ruling D
+  // (finding 200 S1): pass the RESOLVED repoRoot, never the raw
+  // process.cwd() `cwd` above -- a doctor invocation from a subdirectory
+  // must still see the skill installed at the repo root.
+  const skillFindings = await reportSkillDrift({ cwd: repoRoot });
+  const lines = [...report.lines, ...skillFindings.map((finding) => finding.message)];
+  const exitCode = skillFindings.length > 0 ? 1 : report.exitCode;
+
+  process.stdout.write(`${lines.join("\n")}\n`);
+  return exitCode;
 }

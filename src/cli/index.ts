@@ -59,7 +59,7 @@ function notImplemented(name: string): CommandHandler {
 // Exported: a public surface later issues amend (registering `init`, `log`
 // and `show`'s real handlers) and later tests import directly.
 export const COMMANDS: CommandSpec[] = [
-  { name: "init", summary: "Register this repo and start capturing sessions", handler: () => initCommand() },
+  { name: "init", summary: "Register this repo and start capturing sessions", handler: (args) => initCommand(args) },
   { name: "log", summary: "List sessions across registered ledgers", handler: () => logCommand() },
   { name: "show", summary: "Show a single session in detail", handler: (args) => showCommand(args) },
   {

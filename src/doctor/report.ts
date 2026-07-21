@@ -4,8 +4,16 @@
 // plus the exit-code rule: 0 when nothing degrades, nonzero when
 // anything does, with every finding named individually (never hidden
 // inside a summary count).
+// @ts-ignore -- node:fs has no ambient types available in this sandbox
+import { existsSync as existsSyncFn, readFileSync as readFileSyncFn } from "node:fs";
 import { ABSENT_MARKER } from "../render/absent.js";
 import { TESTED_CLAUDE_CODE_RANGE } from "./version.js";
+import { joinPath } from "../core/paths.js";
+import { skillSource } from "../install/skillSource.js";
+import { readInstallBackup } from "../install/installBackup.js";
+
+const existsSync = existsSyncFn as (path: string) => boolean;
+const readFileSync = readFileSyncFn as (path: string, encoding: "utf8") => string;
 
 export interface DoctorAbsenceInput {
   session_id: string;
@@ -102,4 +110,49 @@ export function buildDoctorReport(input: DoctorReportInput): DoctorReport {
   }
 
   return { lines, exitCode: findings.length > 0 ? 1 : 0 };
+}
+
+export interface SkillDriftFinding {
+  kind: "skill-drift";
+  message: string;
+}
+
+export interface DoctorRepoInput {
+  // The resolved repo root (rescue Ruling D, finding 200 S1): the caller
+  // must pass the repo root it already resolved (e.g. via
+  // resolveAttribution), never a raw, un-resolved `process.cwd()` -- a
+  // doctor invocation from a subdirectory would otherwise silently miss the
+  // skill installed at the repo root.
+  cwd: string;
+}
+
+// Drift is doctor's job (ISS-0034 ruling 3): compares an INSTALLED skill's
+// bytes against the running package's canonical text and names it, once,
+// as a finding. Never silently rewrites the installed copy -- that decision
+// belongs to the operator (re-run `coreartifact init`), not to doctor,
+// which is read-only everywhere else too. Silent when no skill was
+// installed at all (a `--no-skill` install, or a repo running init from
+// before this feature shipped) -- absence is not drift.
+//
+// Rescue Ruling C (finding 199 S1): the comparison runs ONLY when the
+// install backup itself recorded that `init` installed the skill at this
+// path. A file at the same path with no backup record is not ours to judge
+// -- it is either a pre-existing user file init deliberately skipped
+// (Ruling F) or a hand-authored skill from before this feature shipped;
+// either way, silence, per acceptance criteria #4/#5.
+export async function report(input: DoctorRepoInput): Promise<SkillDriftFinding[]> {
+  const findings: SkillDriftFinding[] = [];
+  const skillPath = joinPath(input.cwd, ".claude", "skills", "coreartifact", "SKILL.md");
+  const backup = readInstallBackup(input.cwd);
+  if (backup.entries[skillPath] === undefined) return findings;
+  if (existsSync(skillPath)) {
+    const installed = readFileSync(skillPath, "utf8");
+    if (installed !== skillSource()) {
+      findings.push({
+        kind: "skill-drift",
+        message: `Installed skill at ${skillPath} differs from the running package's canonical text (drift) -- re-run \`coreartifact init\` to refresh it`,
+      });
+    }
+  }
+  return findings;
 }

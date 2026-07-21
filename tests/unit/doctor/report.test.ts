@@ -4,7 +4,12 @@
 // named finding, drive a nonzero exit, and leave sections 1/2/4 (or 1/2/3)
 // intact rather than crashing or silently dropping the section.
 import { describe, expect, it } from "vitest";
-import { buildDoctorReport } from "../../../src/doctor/report.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildDoctorReport, report } from "../../../src/doctor/report.js";
+import { skillSource } from "../../../src/install/skillSource.js";
+import { installBackupPath } from "../../../src/install/installBackup.js";
 
 const BASE = {
   runningVersion: "2.1.209",
@@ -65,5 +70,76 @@ describe("doctor/report: worktreeScanError degradation (F134/F136)", () => {
     expect(report.lines.some((line) => line === "Worktree missing settings file: /some/other/worktree")).toBe(
       true,
     );
+  });
+});
+
+describe("doctor/report: report() skill drift (ISS-0034)", () => {
+  function withTempDir<T>(fn: (dir: string) => T): T {
+    const dir = mkdtempSync(join(tmpdir(), "cart-report-skill-"));
+    try {
+      return fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  function skillPath(dir: string): string {
+    return join(dir, ".claude", "skills", "coreartifact", "SKILL.md");
+  }
+
+  // Rescue Ruling C (finding 199 S1): the drift comparison only runs when
+  // the install backup itself recorded that `init` installed this skill --
+  // seeded here by hand (rather than going through `installSkill`) so this
+  // suite stays a narrow, targeted test of `report()` alone.
+  function seedBackupRecord(dir: string, path: string): void {
+    mkdirSync(join(dir, ".coreartifact"), { recursive: true });
+    writeFileSync(installBackupPath(dir), JSON.stringify({ v: 1, entries: { [path]: { existed: false } } }));
+  }
+
+  it("stays silent when no skill is installed", async () => {
+    await withTempDir(async (dir) => {
+      const findings = await report({ cwd: dir });
+      expect(findings).toEqual([]);
+    });
+  });
+
+  it("stays silent when the installed skill matches the canonical text", async () => {
+    await withTempDir(async (dir) => {
+      const path = skillPath(dir);
+      mkdirSync(join(dir, ".claude", "skills", "coreartifact"), { recursive: true });
+      writeFileSync(path, skillSource());
+      seedBackupRecord(dir, path);
+      const findings = await report({ cwd: dir });
+      expect(findings).toEqual([]);
+    });
+  });
+
+  it("names a skill-drift finding when the installed bytes differ from the canonical text and the install was recorded in the backup", async () => {
+    await withTempDir(async (dir) => {
+      const path = skillPath(dir);
+      mkdirSync(join(dir, ".claude", "skills", "coreartifact"), { recursive: true });
+      writeFileSync(path, `${skillSource()}\nmutated\n`);
+      seedBackupRecord(dir, path);
+      const findings = await report({ cwd: dir });
+      expect(findings).toHaveLength(1);
+      expect(findings[0].kind).toBe("skill-drift");
+      expect(findings[0].message.toLowerCase()).toMatch(/drift|differ/);
+    });
+  });
+
+  // Rescue Ruling C's central proof: a file at our path whose bytes differ
+  // from canonical but was NEVER recorded in the install backup (a
+  // pre-existing user file init skipped per Ruling F, or a hand-authored
+  // skill from before this feature shipped) must stay silent -- it is not
+  // ours to judge.
+  it("stays silent when the file differs from canonical but was never recorded in the install backup (user-authored, Ruling C)", async () => {
+    await withTempDir(async (dir) => {
+      const path = skillPath(dir);
+      mkdirSync(join(dir, ".claude", "skills", "coreartifact"), { recursive: true });
+      writeFileSync(path, "# entirely user-authored content, never installed by coreartifact\n");
+      // Deliberately no seedBackupRecord call.
+      const findings = await report({ cwd: dir });
+      expect(findings).toEqual([]);
+    });
   });
 });

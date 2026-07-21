@@ -23,6 +23,18 @@ const writeFileSync = writeFileSyncFn as (path: string, data: string) => void;
 // reference.
 export const COREARTIFACT_GITIGNORE_LINES = [".coreartifact/", ".claude/settings.local.json"];
 
+// The gitignore line the installed skill (ISS-0034) is covered by — same
+// per-install/machine-local posture as .claude/settings.local.json above,
+// named separately since it is captured/restored under its own install-
+// backup bookkeeping rather than folded into COREARTIFACT_GITIGNORE_LINES
+// (a repo upgrading from before this feature shipped never had it).
+//
+// Operator amendment 2026-07-21 (Ruling E, finding 201 S2): scoped to
+// exactly the installed path, `.claude/skills/coreartifact/` — never the
+// whole `.claude/skills/` directory, which would ignore every OTHER,
+// user-authored skill living as a sibling under the same directory.
+export const SKILL_GITIGNORE_LINE = ".claude/skills/coreartifact/";
+
 function normalizeLines(content: string): Set<string> {
   return new Set(
     content

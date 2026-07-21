@@ -23,6 +23,7 @@ import { mergeHookConfig } from "../../install/hookConfig.js";
 import { ensureGitignoreLines } from "../../install/gitignore.js";
 import { resolveHookArtifactSource } from "../../install/hookArtifactSource.js";
 import { askConsent, realConsentIO } from "../../install/consent.js";
+import { installSkill } from "../../install/init.js";
 
 declare const process: {
   cwd(): string;
@@ -73,7 +74,8 @@ function readExistingSettings(settingsPath: string): Record<string, unknown> {
   return {};
 }
 
-export async function initCommand(): Promise<number> {
+export async function initCommand(args: string[] = []): Promise<number> {
+  const noSkill = args.includes("--no-skill");
   let repoRoot: string;
   try {
     repoRoot = resolveRepoRoot(process.cwd());
@@ -134,7 +136,16 @@ export async function initCommand(): Promise<number> {
     );
   }
 
-  // 5. Registry entry — the registry module's own fold guarantees
+  // 5. Skill (ISS-0034 rescue Ruling A, finding 196/198): the ONE real wire-
+  // up point -- `installSkill` (src/install/init.ts) is the SAME worker the
+  // locked acceptance test's standalone `init()` import delegates to, so
+  // there is exactly one implementation, not a parallel path nobody in the
+  // real CLI ever ran. `--no-skill` is the only opt-out (spec ruling 1: no
+  // consent question, loud by default).
+  const skillResult = installSkill(repoRoot, { noSkill });
+  lines.push(skillResult.message);
+
+  // 6. Registry entry — the registry module's own fold guarantees
   // uniqueness by repo root, so this is always safe to append.
   await addLedger(repoRoot);
   lines.push(`registry:       added ${repoRoot} to ${paths.registry}`);

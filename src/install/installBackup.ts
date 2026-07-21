@@ -63,6 +63,15 @@ export function claudeDirBackupKey(root: string): string {
   return joinPath(root, ".claude");
 }
 
+// The `.claude/skills` directory's own backup-entry key (ISS-0034 ruling G):
+// the same directory-existence pattern as claudeDirBackupKey above, one
+// level down, so uninstall can tell "init's own skill install created this
+// directory" apart from "a user's own skill already lived here" before
+// removing it as an empty parent of the installed skill's own directory.
+export function skillsDirBackupKey(root: string): string {
+  return joinPath(root, ".claude", "skills");
+}
+
 // Reviewer finding F109: `typeof x === "object"` also passes for `[]` and
 // `null` -- neither is a usable entries MAP. `[]` folds through as
 // "usable, empty," letting uninstall proceed destructively with zero
@@ -195,6 +204,47 @@ export function captureInstallBackup(repoRoot: string): void {
 
 export function readInstallBackup(repoRoot: string): InstallBackup {
   return readBackupFile(installBackupPath(repoRoot));
+}
+
+// A single-path variant of captureInstallBackup (ISS-0034): records ONE
+// arbitrary path's pre-touch bytes/absence into the SAME shared manifest,
+// first-capture-wins, for callers that touch only one or two paths (the
+// installed skill file, its own .gitignore line) rather than the whole
+// settings/gitignore/worktree inventory `init` captures for the hook
+// config. Sharing the manifest (rather than a second file) is what makes
+// "the skill joins the install backup" (spec ruling 2) literally true: one
+// inversion oracle for everything `init` has ever written to a repo.
+export function captureBackupEntry(repoRoot: string, targetPath: string): void {
+  if (!existsSync(repoRoot)) return;
+  try {
+    const backupPath = installBackupPath(repoRoot);
+    const backup = readBackupFile(backupPath);
+    captureOne(backup, targetPath);
+    mkdirSync(joinPath(repoRoot, ".coreartifact"), { recursive: true });
+    writeFileSync(backupPath, JSON.stringify(backup));
+  } catch {
+    // Best-effort, same posture as captureInstallBackup: never let a
+    // capture failure break the caller's install step.
+  }
+}
+
+// Directory-existence variant of captureBackupEntry (ISS-0034 ruling G):
+// records whether `dirPath` existed BEFORE the caller is about to
+// (possibly) create it, into the SAME shared manifest, first-capture-wins.
+// Used for `.claude/skills` so uninstall can tell "init's own skill install
+// created this directory" apart from "a user's own sibling skill already
+// lived here" before removing it as an empty parent.
+export function captureBackupDirEntry(repoRoot: string, dirPath: string): void {
+  if (!existsSync(repoRoot)) return;
+  try {
+    const backupPath = installBackupPath(repoRoot);
+    const backup = readBackupFile(backupPath);
+    captureDirExistence(backup, dirPath);
+    mkdirSync(joinPath(repoRoot, ".coreartifact"), { recursive: true });
+    writeFileSync(backupPath, JSON.stringify(backup));
+  } catch {
+    // Best-effort, same posture as captureBackupEntry.
+  }
 }
 
 // Whether repoRoot has a usable install-backup manifest -- reviewer finding
