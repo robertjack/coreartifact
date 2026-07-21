@@ -255,6 +255,10 @@ findings section and the decisions log.
   REFUSED a bogus --session id, then bound unbound evidence + exit
   passthrough) → log → uninstall clean. Scratch registrations from
   the audit/probes all uninstalled; scenario dashboards stopped.
+  0.1.1 SHIPPED same day: repo picker in the overview header (the
+  ?repo= control api.md always had; options accumulate across scoped
+  loads, URL-persisted, basename labels w/ full-root fallback) — first
+  post-launch user-feedback feature, suite 92/624.
   REMAINING post-launch: write-up voice pass + posting (draft
   banner in tree, honestly) · .216 keyboard cell → range bump →
   banner retire · expand-gate watch begins (ping receiver live).
