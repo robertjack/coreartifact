@@ -124,3 +124,33 @@ describe('overview view-model', () => {
     expect(['verified', 'failing', 'unverified']).not.toContain(row.badge);
   });
 });
+
+// Repo picker (0.1.1): options derive from accumulated roots; the fetch URL
+// wires the API's existing ?repo= parameter (api.md Surface C).
+import { overviewUrl, repoPickerOptions } from '../../web/src/views/overview/model';
+
+describe('repoPickerOptions', () => {
+  it('dedupes, sorts, and labels by basename', () => {
+    const opts = repoPickerOptions(['/b/tryout', '/a/coreartifact', '/b/tryout']);
+    expect(opts).toEqual([
+      { value: '/a/coreartifact', label: 'coreartifact' },
+      { value: '/b/tryout', label: 'tryout' },
+    ]);
+  });
+
+  it('a duplicated basename falls back to the full root label — never ambiguous', () => {
+    const opts = repoPickerOptions(['/x/app', '/y/app', '/z/other']);
+    expect(opts.map((o) => o.label)).toEqual(['/x/app', '/y/app', 'other']);
+  });
+
+  it('empty input yields no options', () => {
+    expect(repoPickerOptions([])).toEqual([]);
+  });
+});
+
+describe('overviewUrl', () => {
+  it('null selects the union; a root is percent-encoded into ?repo=', () => {
+    expect(overviewUrl(null)).toBe('/api/overview');
+    expect(overviewUrl('/a b/repo')).toBe('/api/overview?repo=%2Fa%20b%2Frepo');
+  });
+});

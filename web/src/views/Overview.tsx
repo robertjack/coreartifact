@@ -4,6 +4,8 @@ import {
   barSegments,
   driftBanner,
   headline,
+  overviewUrl,
+  repoPickerOptions,
   repoRow,
   reposSkippedNotice,
   sessionRow,
@@ -37,10 +39,19 @@ function kindBadgeClass(kind: string | null): string {
 
 export default function Overview() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  // null = the union (default). Initialized from the page URL so a scoped
+  // view survives refresh; kept in the URL via replaceState on change.
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("repo"),
+  );
+  // Roots seen across loads — a scoped response may carry only the selected
+  // root, so the picker's option list accumulates rather than re-derives.
+  const [knownRoots, setKnownRoots] = useState<readonly string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/overview")
+    setState({ status: "loading" });
+    fetch(overviewUrl(selectedRepo))
       .then(async (res) => {
         if (!res.ok) {
           // api.md "Error body — one shape, everywhere": surface the
@@ -50,7 +61,10 @@ export default function Overview() {
           throw new Error(body?.error?.message ?? `overview request failed: ${res.status}`);
         }
         const data = (await res.json()) as OverviewResponse;
-        if (!cancelled) setState({ status: "loaded", data });
+        if (!cancelled) {
+          setState({ status: "loaded", data });
+          setKnownRoots((prev) => [...new Set([...prev, ...data.repos.map((r) => r.root)])]);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -60,7 +74,16 @@ export default function Overview() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedRepo]);
+
+  function selectRepo(value: string): void {
+    const repo = value === "" ? null : value;
+    const url = new URL(window.location.href);
+    if (repo === null) url.searchParams.delete("repo");
+    else url.searchParams.set("repo", repo);
+    window.history.replaceState(null, "", url);
+    setSelectedRepo(repo);
+  }
 
   if (state.status === "loading") {
     return (
@@ -97,8 +120,27 @@ export default function Overview() {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-zinc-200 bg-white p-6">
-        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">
-          Overview · verified-delegation share
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-xs font-bold uppercase tracking-wide text-zinc-500">
+            Overview · verified-delegation share
+          </div>
+          {(knownRoots.length > 1 || selectedRepo !== null) && (
+            <select
+              aria-label="Scope to repository"
+              className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700"
+              value={selectedRepo ?? ""}
+              onChange={(e) => selectRepo(e.target.value)}
+            >
+              <option value="">All repos</option>
+              {repoPickerOptions([...new Set([...knownRoots, ...(selectedRepo ? [selectedRepo] : [])])]).map(
+                (opt) => (
+                  <option key={opt.value} value={opt.value} title={opt.value}>
+                    {opt.label}
+                  </option>
+                ),
+              )}
+            </select>
+          )}
         </div>
         <div className="mb-3 text-2xl font-bold tracking-tight">
           {headline(kpi)} delegated sessions verified

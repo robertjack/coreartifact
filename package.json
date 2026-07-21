@@ -1,6 +1,6 @@
 {
   "name": "coreartifact",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The local-first evidence ledger for agent-built software: what ran, what it cost, what changed, and what proves it correct.",
   "type": "module",
   "license": "Apache-2.0",

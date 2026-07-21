@@ -144,3 +144,34 @@ export function sessionRow(
     badge: entry.classification,
   };
 }
+
+// Repo picker (post-launch 0.1.1): options for scoping the overview to one
+// registered root via the API's existing `?repo=` parameter (api.md
+// Surface C — the contract shipped with the filter; the UI simply never
+// grew the control). Options derive from response `repos` entries the
+// caller has ACCUMULATED across loads: a scoped response may carry only
+// the selected root, so the picker's memory must outlive any one response.
+export interface RepoPickerOption {
+  value: string;
+  label: string;
+}
+
+export function repoPickerOptions(roots: readonly string[]): RepoPickerOption[] {
+  const unique = [...new Set(roots)].sort();
+  const basename = (root: string): string => root.split("/").filter(Boolean).at(-1) ?? root;
+  const counts = new Map<string, number>();
+  for (const root of unique) {
+    const b = basename(root);
+    counts.set(b, (counts.get(b) ?? 0) + 1);
+  }
+  // A duplicated basename (two repos named "app") falls back to the full
+  // root as its label — never ambiguous, never truncated dishonestly.
+  return unique.map((root) => ({
+    value: root,
+    label: (counts.get(basename(root)) ?? 0) > 1 ? root : basename(root),
+  }));
+}
+
+export function overviewUrl(repo: string | null): string {
+  return repo === null ? "/api/overview" : `/api/overview?repo=${encodeURIComponent(repo)}`;
+}
